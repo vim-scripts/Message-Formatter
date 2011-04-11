@@ -1,6 +1,12 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 1.5:
+"
+" Added a cache so repeated expansions of the same variable can be looked up rather than computed (potentially much faster, especially when recursion is on).
+"
+" Original version (1.0):
+"
 " Given a pattern string and a set of values, replaces the parameters in the pattern with the specified values. The values may be either a Dictionary or a List,
 " and the expansion can be done recursively or just once, as in the example below.
 "
@@ -50,9 +56,9 @@
 " \ "\\}"
 " let g:parameters=[ 'String', 'test' ]
 
-" let g:message = "{0}, {1}, \\{{2},\\} {3}"
-" let g:parameters = [ "Salman", "Halim (plus {u_0})", "{1}, {0} {t_3}", '\{{0} {1}\}' ]
-
+" let g:message = "{0}, {1}, \\{{2},\\} {3} {0} {0} {2}"
+" let g:parameters = [ "john", "smith (plus {u_0})", "{1}, {0} {t_3}", '\{{0} {1}\}' ]
+"
 " let g:test="/**\n" .
 "       \ "Constant value for '{f_0}'.\n" .
 "       \ "/\n" .
@@ -137,10 +143,16 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
     endif
 
     if ( canBeExpanded )
-      let parameterValue = a:parameters[ parameter ]
+      if ( has_key( s:parameterCache, parameter ) )
+        let parameterValue = s:parameterCache[ parameter ]
+      else
+        let parameterValue = a:parameters[ parameter ]
 
-      if ( a:recursive )
-        let parameterValue = MessageFormatter#FormatMessage( parameterValue, a:parameters, 1 )
+        if ( a:recursive )
+          let parameterValue = MessageFormatter#FormatMessageInternal( parameterValue, a:parameters, 1 )
+        endif
+
+        let s:parameterCache[ parameter ] = parameterValue
       endif
 
       let result .= MessageFormatter#ModifyValue( parameterValue, modifiers )
@@ -163,10 +175,16 @@ endfunction
 function! MessageFormatter#FormatMessage( message, parameters, ... )
   let recursive = exists( "a:1" ) && a:1 == 1
 
+  let s:parameterCache = {}
+
+  return MessageFormatter#FormatMessageInternal( a:message, a:parameters, recursive )
+endfunction
+
+function! MessageFormatter#FormatMessageInternal( message, parameters, recursive )
   let expandedMessage = substitute( a:message, '\\{', '_OPEN_BRACE_', 'g' )
   let expandedMessage = substitute( expandedMessage, '\\}', '_CLOSE_BRACE_', 'g' )
 
-  let result = MessageFormatter#ProcessOnce( expandedMessage, a:parameters, recursive )
+  let result = MessageFormatter#ProcessOnce( expandedMessage, a:parameters, a:recursive )
 
   let result = substitute( result, '_OPEN_BRACE_', '{', 'g' )
   let result = substitute( result, '_CLOSE_BRACE_', '}', 'g' )
