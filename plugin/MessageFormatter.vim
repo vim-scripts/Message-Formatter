@@ -1,6 +1,26 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 2.0:
+"
+" Added new formatting modifier:
+"
+" e: Escapes out quotation marks (") and backslashes, leaving the value suitable for placing in quotes. For example, {e_fName} where fName is Jo\nhn results in
+" Jo\\nhn.
+"
+" If an expansion parameter starts with "eval ", the rest of the value is evaluated and the return value used as the actual parameter value. If recursion is on,
+" that value may contain further parameters.
+"
+" Example:
+"
+" echo MessageFormatter#FormatMessage('public static final {type} {C_variable} = {value};', {'type':'eval input("Type for {variable}: ", "String")', 'variable':'eval input("Variable name: ")', 'value':'eval input("Value: ", "\"{C_variable}\"")'}, 1)
+"
+" Bear in mind that 'type' and 'value' both use the parameter 'variable'. If 'variable' were to refer to either of these, you'd have circular recursion. There
+" is no check in place for that; you'd just end up with a stack overflow.
+"
+" Note, also, that the expression is evaluated only once. After that, its value is stored on the cache--this allows eval parameters to refer to other eval
+" parameters (only useful if recursion is on).
+"
 " Version 1.5:
 "
 " Added a cache so repeated expansions of the same variable can be looked up rather than computed (potentially much faster, especially when recursion is on).
@@ -81,6 +101,7 @@
 " c: camel case: converts 'an interesting phrase' to 'anInterestingPhrase'
 " C: constant mode: converts 'anInterestingPhrase' or 'an interesting phrase' to 'AN_INTERESTING_PHRASE'
 " w: from 'anInterestingPhrase' or 'AN_INTERESTING_PHRASE' to 'an intersting phrase'
+" e: Escapes out quotation marks (") and backslashes, leaving the value suitable for placing in quotes.
 function! MessageFormatter#ModifyValue( value, modifiers )
   let result = a:value
   let i      = 0
@@ -105,6 +126,8 @@ function! MessageFormatter#ModifyValue( value, modifiers )
       let result = toupper( substitute( substitute( result, '\C\([^A-Z]\)\([A-Z]\)', '\1_\2', 'g' ), '[[:space:]_]\+', '_', 'g' ) )
     elseif ( modifier ==# 'w' )
       let result = tolower( substitute( substitute( result, '\C\([^A-Z]\)\([A-Z]\)', '\1 \2', 'g' ), '_', '', 'g' ) )
+    elseif ( modifier ==# 'e' )
+      let result = escape( result, '"\' )
     else
       " Unrecognized modifier.
       let result = '!' . modifier . '!' . result
@@ -134,15 +157,15 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
 
     " If it's a dictionary, it needs to have the key; otherwise (it's a list), it needs to have at least as many items as the parameter. If not, just return the
     " parameter unexpanded.
-    let canBeExpanded = 0
+    let keyExists = 0
 
     if ( isDictionary )
-      let canBeExpanded = has_key( a:parameters, parameter )
+      let keyExists = has_key( a:parameters, parameter )
     else
-      let canBeExpanded = len( a:parameters ) > parameter
+      let keyExists = len( a:parameters ) > parameter
     endif
 
-    if ( canBeExpanded )
+    if ( keyExists )
       if ( has_key( s:parameterCache, parameter ) )
         let parameterValue = s:parameterCache[ parameter ]
       else
@@ -150,6 +173,10 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
 
         if ( a:recursive )
           let parameterValue = MessageFormatter#FormatMessageInternal( parameterValue, a:parameters, 1 )
+        endif
+
+        if ( parameterValue =~ '^eval ' )
+          let parameterValue = eval( substitute( parameterValue, '^eval ', '', '' ) )
         endif
 
         let s:parameterCache[ parameter ] = parameterValue
@@ -169,17 +196,6 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
   return result
 endfunction
 
-" If not recursive, start from beginning, get parameter, expand, continue.
-"
-" If recursive, repeat until no change.
-function! MessageFormatter#FormatMessage( message, parameters, ... )
-  let recursive = exists( "a:1" ) && a:1 == 1
-
-  let s:parameterCache = {}
-
-  return MessageFormatter#FormatMessageInternal( a:message, a:parameters, recursive )
-endfunction
-
 function! MessageFormatter#FormatMessageInternal( message, parameters, recursive )
   let expandedMessage = substitute( a:message, '\\{', '_OPEN_BRACE_', 'g' )
   let expandedMessage = substitute( expandedMessage, '\\}', '_CLOSE_BRACE_', 'g' )
@@ -190,4 +206,15 @@ function! MessageFormatter#FormatMessageInternal( message, parameters, recursive
   let result = substitute( result, '_CLOSE_BRACE_', '}', 'g' )
 
   return result
+endfunction
+
+" If not recursive, start from beginning, get parameter, expand, continue.
+"
+" If recursive, repeat until no change.
+function! MessageFormatter#FormatMessage( message, parameters, ... )
+  let recursive = exists( "a:1" ) && a:1 == 1
+
+  let s:parameterCache = {}
+
+  return MessageFormatter#FormatMessageInternal( a:message, a:parameters, recursive )
 endfunction
