@@ -58,3 +58,63 @@ is no check in place for that; you'd just end up with a stack overflow.
 Note, also, that the expression is evaluated only once. After that, its value is stored on the cache--this allows eval parameters to refer to other eval
 parameters (only useful if recursion is on).
 
+Version 3.0:
+
+Fairly big changes. RELIES UPON MY GetVar.vim (http://vim.sourceforge.net/scripts/script.php?script_id=353) script now.
+
+New formatting parameter:
+
+n: non-displayed value. The return value is suppressed--useful for adding a value to the cache to be used later.
+
+New function:
+
+FormatContainedMessage: Works like MessageFormatter#FormatMessage except that it's always recursive and that its original text string can contain default
+values for the parameters (so the second parameter is optional); for example,
+
+echo FormatContainedMessage( 'My first name is {John::first name} and my full name is {{first name} Smith::full name}; how many letters in {u_full name}?' )
+
+Gives
+
+My first name is John and my full name is John Smith; how many letters in JOHN SMITH?
+
+This can be recursive (look at "full name" and can contain more default values, such as starting things with "eval " to have them evaluated. To force an empty
+string, use {::name} (just {name} assumes that the value will be specified elsewhere).
+
+Some commands and functions to allow the reuse of parameters:
+
+FormatMessage: takes a string and returns a formatted value, using previously specified parameters through:
+
+Formatmessage and Formatmessagerecursive: command versions that call FormatMessage; process whatever is typed.
+
+Addformatparameter: adds whatever you type as is (may be recursive) as a list parameter.
+
+Adddictionaryformatparameter: adds whatever you type as is, with the first word being the name of the parameter and the rest of the arguments the value.
+
+Showparameters: Displays the list of specified parameters.
+
+Resetformatparameters: Removes the list of parameters currently specified.
+
+Version 3.5:
+
+Added a command version of FormatContainedMessage called Formatcontainedmessage that passes everything on the command-line as-is to the function and echoes
+the result.
+
+Added a new default value type:
+
+If the default value for for a parameter (passed to FormatContainedMessage) is "ask", it defaults to asking the user (via an input). If the value is anything
+followed by "ask", it will use that as the default value for the input.
+
+Examples:
+" 
+{ask::first name} will display an input prompt asking, "Enter value for first name".
+
+{ask Smith::last name} will display an input prompt asking "Enter value for last name", but will offer "Smith" as the default value (just press enter to
+accept).
+
+As always, recursion is supported, so
+
+My name is {ask {ask John::first name} {ask Smith::last name}::full name} (family name is {last name}).
+
+Will first prompt for the first name, offering "John" as the default, then for the last name, offering "Smith" as the default and, finally, for the full name,
+offering the entered first and last name together as the default ("John Smith" by default) before displaying the formatted message.
+
