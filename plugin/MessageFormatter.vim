@@ -112,7 +112,12 @@ function! ExtractVariableName()
 
   " If they passed in an empty value on purpose, we should honour it.
   if ( value != '' || valueFinished )
-    let s:MessageFormatter_parameters[ variableName ] = value
+    if ( value =~# 'ask\%( \|$\)' )
+      let defaultValue = substitute( value, 'ask\%( \(.*\)\)\=', '\1', '' )
+      let s:MessageFormatter_parameters[ variableName ] = "eval input( 'Enter value for " . variableName . ": ', '" . defaultValue . "' )"
+    else
+      let s:MessageFormatter_parameters[ variableName ] = value
+    endif
   endif
 
   return ( modifiers == '' ? '' : modifiers . '_' ) . variableName
@@ -127,6 +132,7 @@ function! FormatContainedMessage( text, ... )
 
   return MessageFormatter#FormatMessage( messageToFormat, s:MessageFormatter_parameters, 1 )
 endfunction
+com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
 
 " let s:MessageFormatter_text = 'I am {Salman::full name}'
 " let s:MessageFormatter_text = 'My last name is {last name} and my full name is {Salman {Halim::last name}::full name}.'
@@ -135,3 +141,5 @@ endfunction
 " Decho FormatContainedMessage( "/**\<c-j> * Comment for {c_0}.\<c-j> */\<c-j>public static final {String::type} {some other constants to be used::Ce_0} = {eval '{type}' ==# 'String' ? '\"{0}\"' : '«»'::1};" )
 
 " Decho FormatContainedMessage( "{String::n_type}{minutes in hours::n_0}{::n_value}/**\<c-j> * Comment for {c_0}.\<c-j> */\<c-j>public static final {type} {Ce_0} = {eval '{value}' == '' ? '{1}' : '{value}'::retval}{eval '{type}' ==# 'String' ? '\"{0}\"' : '«»'::n_1};" )
+
+" Decho FormatContainedMessage('{ask John::n_first name}{ask Smith::n_last name}My first name is {first name} and my last name is {last name}, making me {{last name}, {first name}::u_full name}')

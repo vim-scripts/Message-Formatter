@@ -1,6 +1,30 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 3.5:
+"
+" Added a command version of FormatContainedMessage called Formatcontainedmessage that passes everything on the command-line as-is to the function and echoes
+" the result.
+"
+" Added a new default value type:
+"
+" If the default value for for a parameter (passed to FormatContainedMessage) is "ask", it defaults to asking the user (via an input). If the value is anything
+" followed by "ask", it will use that as the default value for the input.
+"
+" Examples:
+
+" {ask::first name} will display an input prompt asking, "Enter value for first name".
+"
+" {ask Smith::last name} will display an input prompt asking "Enter value for last name", but will offer "Smith" as the default value (just press enter to
+" accept).
+"
+" As always, recursion is supported, so
+"
+" My name is {ask {ask John::first name} {ask Smith::last name}::full name} (family name is {last name}).
+"
+" Will first prompt for the first name, offering "John" as the default, then for the last name, offering "Smith" as the default and, finally, for the full name,
+" offering the entered first and last name together as the default ("John Smith" by default) before displaying the formatted message.
+"
 " Version 3.0:
 "
 " Fairly big changes. RELIES UPON MY GetVar.vim script now.
