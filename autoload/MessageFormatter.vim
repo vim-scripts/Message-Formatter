@@ -81,8 +81,6 @@
 "
 " nmap <c-del><c-del>   <Plug>FormatOneLine
 "
-" nmap <c-del><c-del>   <Plug>FormatOneLine
-"
 " nmap <c-s-del>        <Plug>FormatOpModeTemplate
 "
 " Note: <Plug>PlaceTemplateInText looks only at the current word so is useful for templates that are meant to be used as part of a whole line (look at

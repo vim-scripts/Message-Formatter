@@ -1,0 +1,361 @@
+*MessageFormatter.txt*  For Vim version 7.3     Last change: 2011 April 29
+
+PURPOSE                *MessageFormatter_Purpose*
+
+This plugin allows the simplification of repetitive code fragments, allowing
+much faster entry; for example, this text >
+        getset  List<String>  names
+<
+gets converted to >
+        public List<String> getNames()
+        {
+                return m_names;
+        }
+
+        public void setNames( List<String> val )
+        {
+                m_names = val;
+        }
+<
+More importantly, it figures out when you're defining a boolean variable and
+replaces the "get" with "is"; thus, >
+        getset  boolean  old enough
+<
+becomes >
+        public boolean isOldEnough()
+        {
+                return m_oldEnough;
+        }
+
+        public void setOldEnough( boolean val )
+        {
+                m_oldEnough = val;
+        }
+<
+Observe how "old enough" was automatically camel-cased to "oldEnough", and,
+when used with "get" or "is", was also capitalized. The same variable can be
+used over and over again, each time with (if desired) different formatting
+directives; for example, this template pattern >
+        My name is {john::f_fName} and my full name is {{fName} smith::uq_fullName}.
+<
+gets expanded to >
+        My name is John and my full name is "JOHN SMITH".
+<
+Observe, also, how the "fullName" directive recursively contained and expanded
+the fName directive.
+
+
+USAGE                *MessageFormatter_Usage*
+
+For basic usage, see |MessageFormatter_Commands| and |MessageFormatter_Mappings|.
+
+
+DEPENDENCIES                *MessageFormatter_Dependencies*
+
+This plugin depends on my GetVar.vim, which may be downloaded from
+http://www.vim.org/scripts/script.php?script_id=353. This allows you to set
+all the options on a per window, buffer, tab or global basis.
+
+
+OPTIONS                *MessageFormatter_Options*
+
+                                           *g:MessageFormatter_blankParameter*
+
+If a parameter value is intentionally blank, use this as the value (multiple
+whitespace characters get treated as one delimiter, so simply putting extra
+spaces instead won't do what you want).
+
+Defaults to the back tick (`).
+
+                                       *g:MessageFormatter_parameterSeparator*
+
+Regular expression used to separate multiple arguments for parameter
+expansion.
+
+Defaults to two or more whitespace characters. You could change it to a single
+tab, for example.
+
+If no separators are found on the line, it will break the line on a single
+space instead. This is useful if the arguments are simple and contain no
+whitespace; for example, using the built-in getset: >
+        getset boolean someBooleanVariable
+<
+At the same time, a more complex variation should use two spaces because it
+contains spaces within: >
+        getset  HashMap<String, String>  some map variable
+<
+(You can specify the last variable name as a sequence of words; they will
+automatically be converted to
+
+                                               *g:MessageFormatter_jumpMarker*
+
+Defaults to «». Useful if you have a jumping macro system installed (such as
+the very good snippetsEmu.vim). The expression "!jump!" In template
+definitions will be replaced with this, as will inline template variables so
+you can jump from one to the next.
+
+                                   *g:MessageFormatter_createDefaultTemplates*
+
+Defaults to 1. Will install some sample global templates. Use
+Listglobaltemplates to get a list of what's available.
+
+MAPPINGS                *MessageFormatter_Mappings*
+
+                                                 *<Plug>FormatCurrentTemplate*
+
+This is both a normal mode and an insert mode mapping; it expands the last
+inline template placed by <Plug>PlaceTemplateInText, as long as the cursor is
+within the range of lines placed by the mapping.
+
+If invoked from insert mode, the cursor is moved to the very end of the last
+line in the template and left in insert mode. From normal mode, the cursor
+remains where it was, leaving you in normal mode. (I almost always type the
+last value and hit the hotkey straight from insert mode and then continue
+typing.)
+
+Default mapping: <c-del> (both insert and normal mode)
+
+                                                   *<Plug>PlaceTemplateInText*
+
+Given a template name as the WORD (including special characters) on the cusor,
+replaces it with the expansion; if the expansion isn't found, it's replaced
+with itself, wrapped in exclamation marks, so "adsfasdfadsf" becomes
+"!adsfasdfadsf!". You can then hit undo do get to the original and spell it
+correctly, if that's what happened.
+
+Default mapping: <Leader><Leader> (insert mode only)
+
+                                                  *<Plug>PlaceTemplateForLine*
+
+Default mapping: `` (two back-ticks; insert mode only)
+
+                                                         *<Plug>FormatOneLine*
+
+Expands the current cursor line as if it were a template, even if it was laid
+down manually. For example, if you have >
+        public String {my variable::c_var} = {q_var};
+<
+and you hit the hotkey, you get >
+        public String myVariable = "my variable";
+<
+Default mapping: <c-del><c-del> (normal mode only)
+
+                                                     *<Plug>FormatVisualRange*
+
+The big cousin of <Plug>FormatOneLine; does the same thing, except for a
+visually selected range of lines. Useful for ad-hoc templates comprising
+multiple lines where the variable may appear on multiple lines. For example, >
+        /**
+         * Constant defining for {my variable::c_var}.
+         */
+        public static String {C_var} = {wq_var};
+<
+gives >
+        /**
+         * Constant defining for myVariable.
+         */
+        public static String MY_VARIABLE = "my variable";
+<
+
+Default mapping: <c-del> (visual mode only)
+                                                  *<Plug>FormatOpModeTemplate*
+
+Same thing as <Plug>FormatVisualRange, except it works in operator-pending
+mode. In the above example, if the cursor were on the first line ("/**"), you
+could hit the hotkey for <Plug>FormatOpModeTemplate followed by 3j to achieve
+the same effect.
+
+Default mapping: <c-s-del> (normal mode only)
+
+
+Note:   <Plug>PlaceTemplateInText looks only at the current word so is useful
+        for templates that are meant to be used as part of a whole line (look
+        at "safetern" in the examples), although it can be used for multi-line
+        templates, also. Conversely, <Plug>PlaceTemplateForLine looks at the
+        entire line because it expects all the parameter values to be provided
+        up front.
+
+
+COMMANDS                *MessageFormatter_Commands*
+
+                                                           *Addglobaltemplate*
+
+Adds a global template that's available everywhere; for example >
+        Addglobaltemplate const /**\n* Constant defining for {::c_var}.\n*/\npublic static String {C_var} = {wq_var};
+<
+The template is invoked by typing "const" and hitting the hotkey for inline
+expansion (<Plug>PlaceTemplateInText) or by typing "const" followed by
+arguments and hitting the hotkey for automatic expansion
+(<Plug>PlaceTemplateForLine).
+
+                                                            *Addlocaltemplate*
+
+Same thing as Addglobaltemplate, except it uses buffer variables to store the
+template so it's only available for this buffer.
+
+Useful for ftplugin settings.
+                                                         *Listglobaltemplates*
+
+Simple list of global template name.
+
+                                                          *Listlocaltemplates*
+
+Simple list of local template name.
+
+                                                           *FormatVisualRange*
+
+Expands a range of text lines in the buffer containing default values for the
+parameters; best called from mappings rather than directly, though you can
+select a range of lines and call it on that (<Plug>FormatVisualRange does just
+that, in face).
+
+
+PATTERNS                *MessageFormatter_Patterns*
+
+                                                   *MessageFormatter_example1*
+
+The examples (loaded unless g:MessageFormatter_createDefaultTemplates is set
+to 0 in your vimrc) define some fairly complex templates. Dissecting one: >
+        Addglobaltemplate var {::type} {::c_var} = new {eval {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}::instanceType}();
+<
+Template name:       var
+Number of arguments: 2 ("type" and "var"); defined by the {::...} format
+
+Template particulars:
+
+{::type}:
+        get value for "type" and use as is.
+{::c_var}:
+        get value for "var" and camel-case it.
+{eval {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}::instanceType}:
+        variable "instanceType" is given an "eval" value,
+
+This gets evaluated as a ternary expression:
+        {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}
+
+        If the value, wrapped in single quotes (p_type; suitable for use in a
+        Vim expression), starts with List, instantiate it as an ArrayList; if
+        it starts with Map, instantiate it has a HashMap; otherwise, use as
+        is. (List and Map are interfaces in Java and can't be instantiated
+        directly).
+
+This allows you to to type >
+        var List<String> names
+<
+
+And hit the hotkey for <Plug>PlaceTemplateForLine (see the mapping for more
+details) in insert mode to get >
+        List<String> names = new ArrayList<String>();
+<
+                                                   *MessageFormatter_example2*
+
+Another one: >
+        Addglobaltemplate do do\n{\n|\n} while ( !jump! );
+<
+Type "do" and hit the mapping for <Plug>PlaceTemplateInText and it will
+replace the word with the expansion in place (can be used with "var", also),
+moving the cursor to the | and replacing the !jump! with jump characters.
+
+If the <Plug>PlaceTemplateInText mapping is used for expansions such as "var"
+above, the cursor goes to the first {::...} variable and all others change to
+{!jump!::...} so a jump hotkey (assuming there is a jumper plugin installed)
+will move from one to the next. Once the values have been entered, hit the
+hotkey for <Plug>FormatCurrentTemplate (insert or normal mode) and the
+template will be expanded inline. The plugin remembers the last template
+placed, so if a second template is placed before the first is expanded, the
+first will be forgotten.
+
+
+PATTERN MODIFIERS                *MessageFormatter_patternModifiers*
+
+Modifiers are supplied to prior to the variable name and are of the format >
+        {modifiers_variableName}
+        {::modifiers_variableName}
+        {default value::modifiers_variableName}
+<
+
+Multiple modifiers are permitted and are processed in the order entered, so
+"tl" will first title case and then lower-case (resulting in all lower-case)
+while "lt" will do it the other way around.
+
+        Modifier  Meaning
+        --------  -----------------------------------------------------------
+           a      repeats value as is (optional)
+           c      camelCase
+           C      CONSTANT_CASE
+           e      escapes quotes and backslashes
+           f      Capitalizes the first letter
+           l      converts the entire thing to lower-case
+           m      followed by a number, repeats string n times (default 1)
+           n      suppresses output; useful for ensuring variable entry order
+           p      wraps argument in apostrophes, escaping inner apostrophes
+           q      wraps argument in double quotes, escaping it as for "e"
+           s      if the argument is non-empty, wraps it in spaces
+           t      Title Cases The Entire Argument
+           u      UPPER CASES THE ARGUMENT
+           w      changes "helloThere" or "HELLO_THERE" to "hello there"
+
+
+                                    *MessageFormatter_patternModifierExamples*
+
+Here are some examples:
+        Argument             Result
+        -------------------  --------------------
+        {john smith::c_var}  johnSmith
+        {john smith::C_var}  JOHN_SMITH
+        {john smith::t_var}  John Smith
+        {!@::m10_var}        !@!@!@!@!@!@!@!@!@!@
+        {++::m5q_var}        "++++++++++"
+
+
+NOTES                *MessageFormatter_Notes*
+
+- Patterns replace all \n instances (backslashes followed by 'n') with
+  newlines and all !jump! occurrences with the value of
+  MessageFormatter_jumpMarker.
+
+- Template definitions are searched locally and then globally, thus a local
+  template with the same name will always be used instead of the global one.
+
+
+SPECIAL VALUES                *MessageFormatter_specialValues*
+
+If the value for a particular parameter begins with one of these, it gets
+treated differently:
+
+- "eval ": whatever follows is executed as a Vim expression and the return
+  value from that is used as the actual value. For example, >
+        {eval strpart( {::p_name}, 0, 3 )::u_shortName}
+<
+  will produce, assuming "name" is "John" (the "u" convets it to upper-case): >
+        JOH
+<
+- "ask": Puts up an input prompt, asking for the value of the the parameter
+  interactively; if something follows the "ask", it is used as the default
+  value for the input. For example, >
+        {ask {::lName}, {::fName}::t_fullName}
+<
+  prompts for the value, of the full name, using "lName, fName" as the
+  default. (The "t" converts it to title-case, allowing inputs such as
+  "smith" and "john".)
+
+Both forms allow the embedding of further parameters within recursively; you
+could even put further "ask" prompts within (for lName and fName above, for
+example).
+
+
+TIPS                *MessageFormatter_Tips*
+
+- To get snake_case_variable_name type variables while starting with "snake
+  case variable name", use "Cl" as the modifier (convert to
+  A_CONSTANT_TYPE_VARIABLE and then lower-case the whole thing). >
+        {::Cl_var}
+<
+
+- Similarly, to get ClassName type variables from "class name", use "cf" as
+  the modifier (camel case to get "className" and then capitalize the first
+  letter). >
+        {::cf_var}
+<
+
+ vim:tw=78:ts=8:ft=help:norl:sw=8:et

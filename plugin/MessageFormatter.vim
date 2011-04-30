@@ -176,7 +176,11 @@ function! PlaceTemplateInText()
   let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
 
   undojoin
+
+  let savedFo = &fo
+  set fo=
   execute 'normal! a' . result . "\<esc>"
+  let &fo = savedFo
 
   " Store for automatic expansion later.
   let b:MessageFormatter_snippetStart = line( "'[" )
@@ -264,7 +268,10 @@ function! PlaceTemplateForLine( lineNumber )
     " Convert jump directives
     let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
 
-    execute "normal! cc\<c-r>=result\<esc>"
+  let savedFo = &fo
+  set fo=
+  execute "normal! cc\<c-r>=result\<esc>"
+  let &fo = savedFo
 
     '[,']Formatvisualrange
   endif
