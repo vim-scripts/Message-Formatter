@@ -1,6 +1,13 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 4.5:
+"
+" Bug fixes, mostly, though added one more option:
+"
+" g:MessageFormatter_formatCurrentLineAsFallback (default 1): if attempting to format a template via the <Plug>FormatCurrentTemplate mapping when not actually
+" in a template, will fall back to formatting just the current line as an ad-hoc template if this is 1. If 0, will give an error message instead.
+"
 " Version 4.0:
 "
 " Changed the interface, adding the ability to expand templates while typing.
@@ -375,7 +382,8 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
         endif
 
         if ( parameterValue =~# '^eval ' )
-          let parameterValue = eval( substitute( parameterValue, '^eval ', '', '' ) )
+          let parameterValue = string( eval( substitute( parameterValue, '^eval ', '', '' ) ) )
+          let parameterValue = substitute( parameterValue, '^''\=\(.\{-}\)''\=$', '\1', 'g' )
         elseif ( parameterValue =~# 'ask\%( \|$\)' )
           let parameterValue = input( "Set '" . parameter . "' to: ", substitute( parameterValue, '^ask \=', '', '' ) )
         endif
@@ -437,36 +445,51 @@ function! MessageFormatter#FormatOpModeTemplate( type, ... )
 endfunction
 
 function! MessageFormatter#FormatCurrentTemplate( endInInsertMode )
+  let error = ''
+
   if ( !exists( "b:MessageFormatter_snippetStart" ) || !exists( "b:MessageFormatter_snippetEnd" ) )
-    echo "Not in a formally defined template."
+    let error = "Not in a formally defined template."
+  else
+    let currentLine = line( '.' )
 
-    return
-  endif
+    if ( currentLine >= b:MessageFormatter_snippetStart && currentLine <= b:MessageFormatter_snippetEnd )
+      " Break the undo chain.
+      execute "normal! i\<c-g>u"
 
-  let currentLine = line( '.' )
+      execute b:MessageFormatter_snippetStart . ',' . b:MessageFormatter_snippetEnd . 'Formatvisualrange'
 
-  if ( currentLine >= b:MessageFormatter_snippetStart && currentLine <= b:MessageFormatter_snippetEnd )
-    execute b:MessageFormatter_snippetStart . ',' . b:MessageFormatter_snippetEnd . 'Formatvisualrange'
+      " Move to the end of the snippet and start insert mode so the user can continue.
+      "
+      " SALMAN: Look for {|} or something and move the cursor there instead?
+      if ( a:endInInsertMode )
+        execute b:MessageFormatter_snippetEnd
 
-    " Move to the end of the snippet and start insert mode so the user can continue.
-    "
-    " SALMAN: Look for {|} or something and move the cursor there instead?
-    if ( a:endInInsertMode )
-      execute b:MessageFormatter_snippetEnd
+        startinsert!
+      endif
 
-      startinsert!
+      return
     endif
-
-    return
   endif
 
-  echo "Not inside the last used template."
+  if ( error == '' )
+    let error = "Not inside the last used template."
+  endif
+
+  if ( GetVar#GetVar( "MessageFormatter_formatCurrentLineAsFallback" ) == 1 )
+    echo error . ' Falling back to current line.'
+    Formatvisualrange
+  else
+    echo error
+  endif
 endfunction
 
 let s:escapeOpenBrace = '_OPEN_DIRECTIVE_BRACE_'
 let s:escapeCloseBrace = '_CLOSE_DIRECTIVE_BRACE_'
 
 function! MessageFormatter#FormatVisualRange( line1, line2 )
+    " Break the undo chain.
+    execute "normal! i\<c-g>u"
+
     call MessageFormatter#ResetParameterCache()
 
     let s:MessageFormatter_parameters = {}

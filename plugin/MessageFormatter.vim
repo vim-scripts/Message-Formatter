@@ -16,6 +16,10 @@ if ( !exists( "g:MessageFormatter_jumpMarker" ) )
   let g:MessageFormatter_jumpMarker = '«»'
 endif
 
+if ( !exists( "g:MessageFormatter_formatCurrentLineAsFallback" ) )
+  let g:MessageFormatter_formatCurrentLineAsFallback = 1
+endif
+
 function! FormatMessage( message, recursive )
   if ( !exists( "g:MessageFormatter_parameters" ) )
     return a:message
@@ -186,17 +190,17 @@ function! PlaceTemplateInText()
   let b:MessageFormatter_snippetStart = line( "'[" )
   let b:MessageFormatter_snippetEnd   = line( "']" )
 
-  normal `[
+  normal '[
 
   " Either the beginning of the line or a non-pipe character followed by a pipe followed by a non-pipe charcter or the end of the line. Forces the system to find
   " a single pipe character (avoiding the || boolean construct).
-  let searchPosition = search( '\%(^\|[^|]\)\zs|\ze\%([^|]\|$\)', 'cW', line( "`]" ) )
+  let searchPosition = search( '\%(^\|[^|]\)\zs|\ze\%([^|]\|$\)', 'cW', line( "']" ) )
 
   if ( searchPosition > 0 )
     normal "_x
     startinsert
   else
-    normal `]
+    normal ']
     startinsert!
   endif
 endfunction
@@ -225,7 +229,8 @@ function! PlaceTemplateForLine( lineNumber )
   " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
   execute "normal! i\<c-g>u"
 
-  let line = getline( a:lineNumber )
+  let jumpCharacters = GetVar#GetVar( "MessageFormatter_jumpMarker" )
+  let line           = getline( a:lineNumber )
 
   let args    = split( line, GetVar#GetVar( "MessageFormatter_parameterSeparator" ) )
   let numArgs = len( args )
@@ -245,8 +250,12 @@ function! PlaceTemplateForLine( lineNumber )
 
   if ( templateDefinition == '!' . templateName . '!' )
     echo printf( "The template \"%s\" wasn't found locally or globally.", templateName )
+
+    startinsert!
   elseif ( numArgs < numSplits )
     echo printf( "Not enough arguments (need %d, including the command itself, but got only %d).", numSplits, numArgs )
+
+    startinsert!
   else
     let result = splitted[ 0 ]
 
@@ -266,17 +275,28 @@ function! PlaceTemplateForLine( lineNumber )
     " Convert newlines
     let result = substitute( result, '\\n', "\n", 'g' )
     " Convert jump directives
-    let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
+    let result = substitute( result, '!jump!', jumpCharacters, 'g' )
 
-  let savedFo = &fo
-  set fo=
-  execute "normal! cc\<c-r>=result\<esc>"
-  let &fo = savedFo
+    let savedFo = &fo
+    set fo=
+    execute "normal! cc\<c-r>=result\<esc>"
+    let &fo = savedFo
 
     '[,']Formatvisualrange
-  endif
 
-  startinsert!
+    normal '[
+
+    " If a jump marker is found, put the cursor there; otherwise, move it to the end of the expansion.
+    let searchPosition = search( jumpCharacters, 'cW', line( "']" ) )
+
+    if ( searchPosition > 0 )
+      execute 'normal "_' . strlen( jumpCharacters ) . 'x'
+      startinsert
+    else
+      normal ']
+      startinsert!
+    endif
+  endif
 endfunction
 
 " An add abbreviation method that replaces empty {::variable} types with {«»::variable} and the very first one with a |; also replaces literal \n (backslash
@@ -314,6 +334,7 @@ com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
 if ( !hasmapto( '<Plug>FormatCurrentTemplate', 'i' ) )
   imap <silent> <c-del> <Plug>FormatCurrentTemplate
 endif
+
 if ( !hasmapto( '<Plug>FormatCurrentTemplate', 'n' ) )
   nmap <silent> <c-del> <Plug>FormatCurrentTemplate
 endif
@@ -357,4 +378,6 @@ if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
   Addglobaltemplate down {::subclass} {::variable} = ({subclass}) {::parentVariable};
   Addglobaltemplate safetern ( {::var} == null ? "" : {var} )
   Addglobaltemplate do do\n{\n|\n} while ( !jump! );
+  Addglobaltemplate eval {::expression} = {eval {expression}::expressionValue}
+  Addglobaltemplate evalq {eval {::expression}::expressionValue}
 endif

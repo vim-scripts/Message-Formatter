@@ -1,6 +1,6 @@
 *MessageFormatter.txt*  For Vim version 7.3     Last change: 2011 April 29
 
-PURPOSE                *MessageFormatter_Purpose*
+PURPOSE                                             *MessageFormatter_Purpose*
 
 This plugin allows the simplification of repetitive code fragments, allowing
 much faster entry; for example, this text >
@@ -45,19 +45,19 @@ Observe, also, how the "fullName" directive recursively contained and expanded
 the fName directive.
 
 
-USAGE                *MessageFormatter_Usage*
+USAGE                                                 *MessageFormatter_Usage*
 
 For basic usage, see |MessageFormatter_Commands| and |MessageFormatter_Mappings|.
 
 
-DEPENDENCIES                *MessageFormatter_Dependencies*
+DEPENDENCIES                                   *MessageFormatter_Dependencies*
 
 This plugin depends on my GetVar.vim, which may be downloaded from
 http://www.vim.org/scripts/script.php?script_id=353. This allows you to set
 all the options on a per window, buffer, tab or global basis.
 
 
-OPTIONS                *MessageFormatter_Options*
+OPTIONS                                             *MessageFormatter_Options*
 
                                            *g:MessageFormatter_blankParameter*
 
@@ -85,7 +85,9 @@ contains spaces within: >
         getset  HashMap<String, String>  some map variable
 <
 (You can specify the last variable name as a sequence of words; they will
-automatically be converted to
+automatically be converted to camel case. Tweak the template definition and
+replace the "c_" bit with "Cl_" to get snake case (as in the
+|MessageFormatter_Tips| section).
 
                                                *g:MessageFormatter_jumpMarker*
 
@@ -99,12 +101,20 @@ you can jump from one to the next.
 Defaults to 1. Will install some sample global templates. Use
 Listglobaltemplates to get a list of what's available.
 
-MAPPINGS                *MessageFormatter_Mappings*
+                              *g:MessageFormatter_formatCurrentLineAsFallback*
+
+Defaults to 1. If |<Plug>FormatCurrentTemplate| is called when the cursor
+isn't in a template previously placed by |<Plug>PlaceTemplateInText|, the
+processor will process the current line as an ad-hoc template instead (same as
+|<Plug>FormatOneLine|); if this is set to 0 instead, the system will give an
+error message.
+
+MAPPINGS                                           *MessageFormatter_Mappings*
 
                                                  *<Plug>FormatCurrentTemplate*
 
 This is both a normal mode and an insert mode mapping; it expands the last
-inline template placed by <Plug>PlaceTemplateInText, as long as the cursor is
+inline template placed by |<Plug>PlaceTemplateInText|, as long as the cursor is
 within the range of lines placed by the mapping.
 
 If invoked from insert mode, the cursor is moved to the very end of the last
@@ -127,6 +137,18 @@ Default mapping: <Leader><Leader> (insert mode only)
 
                                                   *<Plug>PlaceTemplateForLine*
 
+Given a line containing nothing but a template name and parameter values, will
+replace the line with the fully expanded template. The arguments should be
+separated by |g:MessageFormatter_parameterSeparator| or, if the arguments are
+single words (themselves contain no whitespace) they may be separated by a
+single space to ease data entry. If a truly blank value is desired for any of
+the parameters, use |g:MessageFormatter_blankParameter| as the value.
+
+This is probably the most commonly used mapping of the entire plugin, after
+templates have been defined, though |<Plug>PlaceTemplateInText| definitely has
+its place where inline templates are desired, as this mapping commandeers the
+entire line.
+
 Default mapping: `` (two back-ticks; insert mode only)
 
                                                          *<Plug>FormatOneLine*
@@ -142,7 +164,7 @@ Default mapping: <c-del><c-del> (normal mode only)
 
                                                      *<Plug>FormatVisualRange*
 
-The big cousin of <Plug>FormatOneLine; does the same thing, except for a
+The big cousin of |<Plug>FormatOneLine|; does the same thing, except for a
 visually selected range of lines. Useful for ad-hoc templates comprising
 multiple lines where the variable may appear on multiple lines. For example, >
         /**
@@ -160,7 +182,7 @@ gives >
 Default mapping: <c-del> (visual mode only)
                                                   *<Plug>FormatOpModeTemplate*
 
-Same thing as <Plug>FormatVisualRange, except it works in operator-pending
+Same thing as |<Plug>FormatVisualRange|, except it works in operator-pending
 mode. In the above example, if the cursor were on the first line ("/**"), you
 could hit the hotkey for <Plug>FormatOpModeTemplate followed by 3j to achieve
 the same effect.
@@ -168,15 +190,15 @@ the same effect.
 Default mapping: <c-s-del> (normal mode only)
 
 
-Note:   <Plug>PlaceTemplateInText looks only at the current word so is useful
+Note:   |<Plug>PlaceTemplateInText| looks only at the current word so is useful
         for templates that are meant to be used as part of a whole line (look
         at "safetern" in the examples), although it can be used for multi-line
-        templates, also. Conversely, <Plug>PlaceTemplateForLine looks at the
+        templates, also. Conversely, |<Plug>PlaceTemplateForLine| looks at the
         entire line because it expects all the parameter values to be provided
         up front.
 
 
-COMMANDS                *MessageFormatter_Commands*
+COMMANDS                                           *MessageFormatter_Commands*
 
                                                            *Addglobaltemplate*
 
@@ -184,13 +206,13 @@ Adds a global template that's available everywhere; for example >
         Addglobaltemplate const /**\n* Constant defining for {::c_var}.\n*/\npublic static String {C_var} = {wq_var};
 <
 The template is invoked by typing "const" and hitting the hotkey for inline
-expansion (<Plug>PlaceTemplateInText) or by typing "const" followed by
+expansion (|<Plug>PlaceTemplateInText|) or by typing "const" followed by
 arguments and hitting the hotkey for automatic expansion
-(<Plug>PlaceTemplateForLine).
+(|<Plug>PlaceTemplateForLine|).
 
                                                             *Addlocaltemplate*
 
-Same thing as Addglobaltemplate, except it uses buffer variables to store the
+Same thing as |Addglobaltemplate|, except it uses buffer variables to store the
 template so it's only available for this buffer.
 
 Useful for ftplugin settings.
@@ -206,15 +228,15 @@ Simple list of local template name.
 
 Expands a range of text lines in the buffer containing default values for the
 parameters; best called from mappings rather than directly, though you can
-select a range of lines and call it on that (<Plug>FormatVisualRange does just
-that, in face).
+select a range of lines and call it on that (|<Plug>FormatVisualRange| does just
+that, in fact).
 
 
-PATTERNS                *MessageFormatter_Patterns*
+PATTERNS                                           *MessageFormatter_Patterns*
 
                                                    *MessageFormatter_example1*
 
-The examples (loaded unless g:MessageFormatter_createDefaultTemplates is set
+The examples (loaded unless |g:MessageFormatter_createDefaultTemplates| is set
 to 0 in your vimrc) define some fairly complex templates. Dissecting one: >
         Addglobaltemplate var {::type} {::c_var} = new {eval {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}::instanceType}();
 <
@@ -243,7 +265,7 @@ This allows you to to type >
         var List<String> names
 <
 
-And hit the hotkey for <Plug>PlaceTemplateForLine (see the mapping for more
+And hit the hotkey for |<Plug>PlaceTemplateForLine| (see the mapping for more
 details) in insert mode to get >
         List<String> names = new ArrayList<String>();
 <
@@ -252,21 +274,21 @@ details) in insert mode to get >
 Another one: >
         Addglobaltemplate do do\n{\n|\n} while ( !jump! );
 <
-Type "do" and hit the mapping for <Plug>PlaceTemplateInText and it will
+Type "do" and hit the mapping for |<Plug>PlaceTemplateInText| and it will
 replace the word with the expansion in place (can be used with "var", also),
 moving the cursor to the | and replacing the !jump! with jump characters.
 
-If the <Plug>PlaceTemplateInText mapping is used for expansions such as "var"
+If the |<Plug>PlaceTemplateInText| mapping is used for expansions such as "var"
 above, the cursor goes to the first {::...} variable and all others change to
 {!jump!::...} so a jump hotkey (assuming there is a jumper plugin installed)
 will move from one to the next. Once the values have been entered, hit the
-hotkey for <Plug>FormatCurrentTemplate (insert or normal mode) and the
+hotkey for |<Plug>FormatCurrentTemplate| (insert or normal mode) and the
 template will be expanded inline. The plugin remembers the last template
 placed, so if a second template is placed before the first is expanded, the
 first will be forgotten.
 
 
-PATTERN MODIFIERS                *MessageFormatter_patternModifiers*
+PATTERN MODIFIERS                          *MessageFormatter_patternModifiers*
 
 Modifiers are supplied to prior to the variable name and are of the format >
         {modifiers_variableName}
@@ -278,37 +300,38 @@ Multiple modifiers are permitted and are processed in the order entered, so
 "tl" will first title case and then lower-case (resulting in all lower-case)
 while "lt" will do it the other way around.
 
-        Modifier  Meaning
-        --------  -----------------------------------------------------------
-           a      repeats value as is (optional)
-           c      camelCase
-           C      CONSTANT_CASE
-           e      escapes quotes and backslashes
-           f      Capitalizes the first letter
-           l      converts the entire thing to lower-case
-           m      followed by a number, repeats string n times (default 1)
-           n      suppresses output; useful for ensuring variable entry order
-           p      wraps argument in apostrophes, escaping inner apostrophes
-           q      wraps argument in double quotes, escaping it as for "e"
-           s      if the argument is non-empty, wraps it in spaces
-           t      Title Cases The Entire Argument
-           u      UPPER CASES THE ARGUMENT
-           w      changes "helloThere" or "HELLO_THERE" to "hello there"
+    Modifier  Meaning
+    --------  -----------------------------------------------------------
+       a      repeats value as is (optional)
+       c      camelCase
+       C      CONSTANT_CASE
+       e      escapes quotes and backslashes
+       f      Capitalizes the first letter
+       l      converts the entire thing to lower-case
+       m      followed by a number, repeats string n times (default 1)
+       n      suppresses output; useful for ensuring variable entry order
+       p      wraps argument in apostrophes, escaping inner apostrophes
+       q      wraps argument in double quotes, escaping it as for "e"
+       s      if the argument is non-empty, wraps it in spaces
+       t      Title Cases The Entire Argument
+       u      UPPER CASES THE ARGUMENT
+       w      changes "helloThere" or "HELLO_THERE" to "hello there"
 
 
                                     *MessageFormatter_patternModifierExamples*
 
 Here are some examples:
-        Argument             Result
-        -------------------  --------------------
-        {john smith::c_var}  johnSmith
-        {john smith::C_var}  JOHN_SMITH
-        {john smith::t_var}  John Smith
-        {!@::m10_var}        !@!@!@!@!@!@!@!@!@!@
-        {++::m5q_var}        "++++++++++"
+
+                  Argument             Result
+                  -------------------  --------------------
+                  {john smith::c_var}  johnSmith
+                  {john smith::C_var}  JOHN_SMITH
+                  {john smith::t_var}  John Smith
+                  {!@::m10_var}        !@!@!@!@!@!@!@!@!@!@
+                  {++::m5q_var}        "++++++++++"
 
 
-NOTES                *MessageFormatter_Notes*
+NOTES                                                 *MessageFormatter_Notes*
 
 - Patterns replace all \n instances (backslashes followed by 'n') with
   newlines and all !jump! occurrences with the value of
@@ -318,7 +341,7 @@ NOTES                *MessageFormatter_Notes*
   template with the same name will always be used instead of the global one.
 
 
-SPECIAL VALUES                *MessageFormatter_specialValues*
+SPECIAL VALUES                                *MessageFormatter_specialValues*
 
 If the value for a particular parameter begins with one of these, it gets
 treated differently:
@@ -344,7 +367,7 @@ could even put further "ask" prompts within (for lName and fName above, for
 example).
 
 
-TIPS                *MessageFormatter_Tips*
+TIPS                                                   *MessageFormatter_Tips*
 
 - To get snake_case_variable_name type variables while starting with "snake
   case variable name", use "Cl" as the modifier (convert to
