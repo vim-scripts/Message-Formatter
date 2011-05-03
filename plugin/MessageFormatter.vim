@@ -168,6 +168,8 @@ function! PlaceTemplateInText()
 
   let result = GetTemplateDefinition( templateName )
 
+  let result = ExpandDefaultValues( result )
+
   " Used to do this right in the AddMessageFormatterTemplate but it's easier to do it here on demand in case they have already provided the arguments on the
   " command-line.
   " Make the first one the cursor location.
@@ -225,6 +227,40 @@ function! GetTemplateDefinition( templateName )
   return result
 endfunction
 
+let s:openBrace  = '_OPEN_BRACE_'
+let s:closeBrace = '_CLOSE_BRACE_'
+
+function! ExpandDefaultValues( line )
+  let result = a:line
+
+  let searchExpression = '\C{def \(\%(\\[{}]\|[^{}]\)\{-}\)::\%(\(\%(\\[{}]\|[^{}]\)\{-}\)_\)\=\(\%(\\[{}]\|[^{}]\)\{-}\)}'
+
+  " Replace the default values; this might need tweaking for recursion and other fancy constructs.
+  let s:numOptionalArguments = 0
+  let oldDefinition          = ''
+  let prefixDefaults         = ''
+
+  while ( result =~ searchExpression )
+    let oldDefinition                                           = result
+    let [ expression, defaultValue, modifiers, variable; rest ] = matchlist( result, searchExpression )
+    let result                                                  = substitute( result, searchExpression, s:openBrace . ( modifiers == '' ? '' : modifiers . '_' ) . '\3' . s:closeBrace, '' )
+
+    if ( oldDefinition != result )
+      " Put in the default value expression here.
+      let prefixDefaults .= "{eval {::p_temp" . s:numOptionalArguments . "} == '' ? {" . defaultValue . "::p_def" . s:numOptionalArguments . "} : {p_temp" . s:numOptionalArguments . "}::n_" . variable . "}"
+    endif
+
+    let s:numOptionalArguments += 1
+  endwhile
+
+  " Non-default parameters first; this way, when we apply arguments, the non-default ones get filled first, leaving a shortfall to fall to the default values.
+  let result = result . prefixDefaults
+  let result = substitute( result, s:openBrace, '{', 'g' )
+  let result = substitute( result, s:closeBrace, '}', 'g' )
+
+  return result
+endfunction
+
 function! PlaceTemplateForLine( lineNumber )
   " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
   execute "normal! i\<c-g>u"
@@ -244,6 +280,8 @@ function! PlaceTemplateForLine( lineNumber )
   let templateName       = args[ 0 ]
   let templateDefinition = GetTemplateDefinition( templateName )
 
+  let templateDefinition = ExpandDefaultValues( templateDefinition )
+
   " By keeping the empty result, the first value can always be prepended as is--if the expression starts with a variable, it'll just be the empty string.
   let splitted  = split( templateDefinition, "{::", 1 )
   let numSplits = len( splitted )
@@ -252,8 +290,8 @@ function! PlaceTemplateForLine( lineNumber )
     echo printf( "The template \"%s\" wasn't found locally or globally.", templateName )
 
     startinsert!
-  elseif ( numArgs < numSplits )
-    echo printf( "Not enough arguments (need %d, including the command itself, but got only %d).", numSplits, numArgs )
+  elseif ( numArgs < ( numSplits - s:numOptionalArguments ) )
+    echo printf( "Not enough arguments; need at least %d (up to %d), including the command itself, but got only %d.", numSplits - s:numOptionalArguments, numSplits, numArgs )
 
     startinsert!
   else
@@ -264,7 +302,9 @@ function! PlaceTemplateForLine( lineNumber )
     while ( argCounter < numSplits )
       let result .= '{'
 
-      let result .= args[ argCounter ] == GetVar#GetVar( "MessageFormatter_blankParameter" ) ? '' : args[ argCounter ]
+      if ( argCounter < numArgs )
+        let result .= args[ argCounter ] == GetVar#GetVar( "MessageFormatter_blankParameter" ) ? '' : args[ argCounter ]
+      endif
 
       let result .= '::'
       let result .= splitted[ argCounter ]
@@ -282,12 +322,15 @@ function! PlaceTemplateForLine( lineNumber )
     execute "normal! cc\<c-r>=result\<esc>"
     let &fo = savedFo
 
+    let snippetStart = line( "'[" )
+    let snippetEnd   = line( "']" )
+
     '[,']Formatvisualrange
 
-    normal '[
+    execute snippetStart
 
     " If a jump marker is found, put the cursor there; otherwise, move it to the end of the expansion.
-    let searchPosition = search( jumpCharacters, 'cW', line( "']" ) )
+    let searchPosition = search( jumpCharacters, 'cW', snippetEnd )
 
     if ( searchPosition > 0 )
       execute 'normal "_' . strlen( jumpCharacters ) . 'x'
@@ -314,11 +357,29 @@ function! AddMessageFormatterTemplate( isGlobal, args )
   let {templateHolder}[ variable ] = expansion
 endfunction
 
+function! ShowTemplates( scope, templateName )
+  try
+    let dictionary = {a:scope}:MessageFormatter_templates
+
+    if ( a:templateName == '' )
+      echo sort( keys (dictionary) )
+    elseif ( has_key( dictionary, a:templateName ) == 1 )
+      echo a:templateName . ': ' . dictionary[ a:templateName ]
+    else
+      let globalOrLocal = a:scope == 'g' ? 'global' : 'local'
+
+      echo printf( "No %s template called '%s' found. List of %s templates: %s", globalOrLocal, a:templateName, globalOrLocal, string( sort( keys( dictionary ) ) ) )
+    endif
+  catch
+    echo printf( "No %s templates defined.", a:scope == 'g' ? 'global' : 'local' )
+  endtry
+endfunction
+
 com! -nargs=+ Addglobaltemplate call AddMessageFormatterTemplate( 1, <q-args> )
 com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 
-com! Listglobaltemplates echo exists( "g:MessageFormatter_templates" ) ? sort( keys( g:MessageFormatter_templates ) ) : "No global templates defined."
-com! Listlocaltemplates echo exists( "b:MessageFormatter_templates" ) ? sort( keys( b:MessageFormatter_templates ) ) : "No local templates defined."
+com! -nargs=? Listglobaltemplates call ShowTemplates( 'g', <q-args> )
+com! -nargs=? Listlocaltemplates call ShowTemplates( 'b', <q-args> )
 
 com! -range Formatvisualrange :call MessageFormatter#FormatVisualRange( <line1>, <line2> )
 
@@ -329,6 +390,9 @@ com! -nargs=+ Addformatparameter call AddFormatParameters( <q-args> )
 com! -nargs=+ Adddictionaryformatparameter call AddDictionaryFormatParameter( <q-args> )
 com! Showparameters echo GetVar#GetSafe( "g:MessageFormatter_parameters", "<No parameters have been defined.>" )
 com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
+
+" SALMAN: Create another mechanism for a set of fixed values to be used. Let user select first few letters of one of these values instead of the whole thing; in
+" case of ambiguity, first match works.
 
 " If the template start and end were stored, expands automatically (even if the template spans multiple lines).
 if ( !hasmapto( '<Plug>FormatCurrentTemplate', 'i' ) )

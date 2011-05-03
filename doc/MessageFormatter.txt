@@ -346,13 +346,17 @@ SPECIAL VALUES                                *MessageFormatter_specialValues*
 If the value for a particular parameter begins with one of these, it gets
 treated differently:
 
-- "eval ": whatever follows is executed as a Vim expression and the return
+                                                       *MessageFormatter_eval*
+
+- "eval ": Whatever follows is executed as a Vim expression and the return
   value from that is used as the actual value. For example, >
         {eval strpart( {::p_name}, 0, 3 )::u_shortName}
 <
   will produce, assuming "name" is "John" (the "u" convets it to upper-case): >
         JOH
 <
+                                                        *MessageFormatter_ask*
+
 - "ask": Puts up an input prompt, asking for the value of the the parameter
   interactively; if something follows the "ask", it is used as the default
   value for the input. For example, >
@@ -365,6 +369,42 @@ treated differently:
 Both forms allow the embedding of further parameters within recursively; you
 could even put further "ask" prompts within (for lName and fName above, for
 example).
+
+                                                        *MessageFormatter_def*
+
+- "def ": The remainder of the value is treated as a default value; that is,
+  if the user passes in nothing for the particular parameter (or, with
+  |<Plug>PlaceTemplateForLine|, using |g:MessageFormatter_blankParameter|),
+  this value is used instead. For example, >
+        Addlocaltemplate for {{def i::c_var}::n_cVar}for ( int {cVar} = {def 0::start}; {cVar} < {::c_limit}; {cVar}++ )\n{\n«»\n}«»
+<
+  This is a simplistic example, but it default to i and 0, respectively, for
+  "var" and "start" if nothing is passed in for those variables.
+
+  The system supports recursive use of default values; so, this will work: >
+        Addlocaltemplate test {def {def john::t_fName} {def smith::t_lName}::t_fullName}
+<
+  Note that this example accepts up to three arguments (fName, lName and
+  fullName); setting them to the empty value
+  (|g:MessageFormatter_blankParameter|) is the same as using the default.
+
+  Default values aren't required; for example, from before: >
+        Addlocaltemplate for {{def i::c_var}::n_cVar}for ( int {cVar} = {def 0::start}; {cVar} < {::c_limit}; {cVar}++ )\n{\n«»\n}«»
+<
+  This template may be expanded by simply >
+        for 20
+<
+  as only the "limit" variable is required.
+
+  Note that the order in which the variables are defined in the template is
+  considered a relative order; in reality, all the supplied arguments are
+  applied to the non-default parameters before they are applied to the default
+  parameters. In this example, if all the values are to be provided, then it
+  has to look like this: >
+        for  20  counter  3
+<
+  This might seem counterintuitive as the required value is, in fact, provided
+  last.
 
 
 TIPS                                                   *MessageFormatter_Tips*

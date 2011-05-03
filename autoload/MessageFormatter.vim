@@ -1,6 +1,17 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 5.0:
+"
+" Added a default value mechanism: if a template variable is defined like this:
+"
+" {def John::firstName}
+"
+" then, during expansion, if an empty value is passed in for firstName, "John" will be used instead. This value can be recursive and may contain other
+" parameters, as before. (Including other "def" expansions.)
+"
+" Also, parameters with default values may be left out to have their default value used; see :help MessageFormatter_def for more details.
+"
 " Version 4.5:
 "
 " Bug fixes, mostly, though added one more option:
@@ -535,8 +546,8 @@ function! MessageFormatter#FormatVisualRange( line1, line2 )
         let value = substitute( value, s:escapeOpenBrace, '{', 'g' )
         let value = substitute( value, s:escapeCloseBrace, '}', 'g' )
 
-        " let s:MessageFormatter_parameters[ variable ] = value == '«»' ? 'ask' : value
-        let s:MessageFormatter_parameters[ variable ] = value
+        let s:MessageFormatter_parameters[ variable ] = value == GetVar#GetVar( "MessageFormatter_jumpMarker" ) ? '' : value
+        " let s:MessageFormatter_parameters[ variable ] = value
 
         let replacement = modifiers == '' ? '\4' : '\3_\4'
         let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1_OPEN_DIRECTIVE_BRACE_' . replacement . '_CLOSE_DIRECTIVE_BRACE_\5', '' )
