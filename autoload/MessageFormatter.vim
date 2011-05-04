@@ -1,6 +1,12 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 5.5:
+"
+" Fixed bug in default processing.
+"
+" Improved help and added examples to help (:help MessageFormatter_Examples).
+"
 " Version 5.0:
 "
 " Added a default value mechanism: if a template variable is defined like this:
@@ -497,95 +503,98 @@ endfunction
 let s:escapeOpenBrace = '_OPEN_DIRECTIVE_BRACE_'
 let s:escapeCloseBrace = '_CLOSE_DIRECTIVE_BRACE_'
 
-function! MessageFormatter#FormatVisualRange( line1, line2 )
-    " Break the undo chain.
+" The last parameter, if 0 or not provided, doesn't break the undo chain.
+function! MessageFormatter#FormatVisualRange( line1, line2, ... )
+  " Break the undo chain unless asked not to.
+  if ( !exists( "a:1" ) || a:1 == 1 )
     execute "normal! i\<c-g>u"
+  endif
 
-    call MessageFormatter#ResetParameterCache()
+  call MessageFormatter#ResetParameterCache()
 
-    let s:MessageFormatter_parameters = {}
-    let currentLine                   = a:line1
-    let firstLine                     = 1
+  let s:MessageFormatter_parameters = {}
+  let currentLine                   = a:line1
+  let firstLine                     = 1
 
-    let directiveExpression       = '{\(\%(\\[{}]\|[^{}]\)\{-}\)::\%(\(\%(\\[{}]\|[^{}]\)\{-}\)_\)\=\(\%(\\[{}]\|[^{}]\)\{-}\)}'
-    let simpleDirectiveExpression = '{\(\%(\\[{}]\|[^{}]\)\+\)}'
+  let directiveExpression       = '{\(\%(\\[{}]\|[^{}]\)\{-}\)::\%(\(\%(\\[{}]\|[^{}]\)\{-}\)_\)\=\(\%(\\[{}]\|[^{}]\)\{-}\)}'
+  let simpleDirectiveExpression = '{\(\%(\\[{}]\|[^{}]\)\+\)}'
 
-    " Extract the variable values from the lines, leaving the lines containing only variable names.
-    while ( currentLine <= a:line2 )
-      let originalLine = getline( currentLine )
-      let newLine      = originalLine
+  " Extract the variable values from the lines, leaving the lines containing only variable names.
+  while ( currentLine <= a:line2 )
+    let originalLine = getline( currentLine )
+    let newLine      = originalLine
 
-      if ( newLine =~ directiveExpression )
-        let newLine    = ''
-        let startIndex = 0
+    if ( newLine =~ directiveExpression )
+      let newLine    = ''
+      let startIndex = 0
+      let matchIndex = match( originalLine, simpleDirectiveExpression, startIndex )
+
+      while ( matchIndex >= 0 )
+        let [ original, variable; remainder ] = matchlist( originalLine, simpleDirectiveExpression, startIndex )
+
+        if ( matchIndex > 0 )
+          let newLine .= originalLine[ startIndex : matchIndex - 1 ]
+        endif
+
+        if ( variable !~ '::' )
+          let newLine .= s:escapeOpenBrace . variable . s:escapeCloseBrace
+        else
+          let newLine .= original
+        endif
+
+        let startIndex = matchend( originalLine, simpleDirectiveExpression, startIndex )
         let matchIndex = match( originalLine, simpleDirectiveExpression, startIndex )
-
-        while ( matchIndex >= 0 )
-          let [ original, variable; remainder ] = matchlist( originalLine, simpleDirectiveExpression, startIndex )
-
-          if ( matchIndex > 0 )
-            let newLine .= originalLine[ startIndex : matchIndex - 1 ]
-          endif
-
-          if ( variable !~ '::' )
-            let newLine .= s:escapeOpenBrace . variable . s:escapeCloseBrace
-          else
-            let newLine .= original
-          endif
-
-          let startIndex = matchend( originalLine, simpleDirectiveExpression, startIndex )
-          let matchIndex = match( originalLine, simpleDirectiveExpression, startIndex )
-        endwhile
-
-        let newLine .= originalLine[ startIndex : ]
-      endif
-
-      while ( newLine =~ directiveExpression )
-        let [ original, value, modifiers, variable; remainder ] = matchlist( newLine, directiveExpression )
-
-        let value = substitute( value, s:escapeOpenBrace, '{', 'g' )
-        let value = substitute( value, s:escapeCloseBrace, '}', 'g' )
-
-        let s:MessageFormatter_parameters[ variable ] = value == GetVar#GetVar( "MessageFormatter_jumpMarker" ) ? '' : value
-        " let s:MessageFormatter_parameters[ variable ] = value
-
-        let replacement = modifiers == '' ? '\4' : '\3_\4'
-        let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1_OPEN_DIRECTIVE_BRACE_' . replacement . '_CLOSE_DIRECTIVE_BRACE_\5', '' )
       endwhile
 
-      let newLine = substitute( newLine, s:escapeOpenBrace, '{', 'g' )
-      let newLine = substitute( newLine, s:escapeCloseBrace, '}', 'g' )
+      let newLine .= originalLine[ startIndex : ]
+    endif
 
-      if ( newLine !=# originalLine )
-        if ( firstLine == 1 )
-          let firstLine = 0
-        else
-          undojoin
-        endif
+    while ( newLine =~ directiveExpression )
+      let [ original, value, modifiers, variable; remainder ] = matchlist( newLine, directiveExpression )
+
+      let value = substitute( value, s:escapeOpenBrace, '{', 'g' )
+      let value = substitute( value, s:escapeCloseBrace, '}', 'g' )
+
+      let s:MessageFormatter_parameters[ variable ] = value == GetVar#GetVar( "MessageFormatter_jumpMarker" ) || value == GetVar#GetVar( "MessageFormatter_blankParameter" ) ? '' : value
+      " let s:MessageFormatter_parameters[ variable ] = value
+
+      let replacement = modifiers == '' ? '\4' : '\3_\4'
+      let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1_OPEN_DIRECTIVE_BRACE_' . replacement . '_CLOSE_DIRECTIVE_BRACE_\5', '' )
+    endwhile
+
+    let newLine = substitute( newLine, s:escapeOpenBrace, '{', 'g' )
+    let newLine = substitute( newLine, s:escapeCloseBrace, '}', 'g' )
+
+    if ( newLine !=# originalLine )
+      if ( firstLine == 1 )
+        let firstLine = 0
+      else
+        undojoin
+      endif
+
+      call setline( currentLine, newLine )
+    endif
+
+    let currentLine += 1
+  endwhile
+
+  " Process the lines.
+  let currentLine = a:line1
+
+  while ( currentLine <= a:line2 )
+    let thisLine = getline( currentLine )
+
+    " Only process lines with directives (or what appear to be directives) on them.
+    if ( thisLine =~ '{.\{-}}' )
+      let newLine = MessageFormatter#FormatMessage( thisLine, s:MessageFormatter_parameters, 1, 1 )
+
+      if ( newLine !=# thisLine )
+        undojoin
 
         call setline( currentLine, newLine )
       endif
+    endif
 
-      let currentLine += 1
-    endwhile
-
-    " Process the lines.
-    let currentLine = a:line1
-
-    while ( currentLine <= a:line2 )
-      let thisLine = getline( currentLine )
-
-      " Only process lines with directives (or what appear to be directives) on them.
-      if ( thisLine =~ '{.\{-}}' )
-        let newLine = MessageFormatter#FormatMessage( thisLine, s:MessageFormatter_parameters, 1, 1 )
-
-        if ( newLine !=# thisLine )
-          undojoin
-
-          call setline( currentLine, newLine )
-        endif
-      endif
-
-      let currentLine += 1
-    endwhile
+    let currentLine += 1
+  endwhile
 endfunction

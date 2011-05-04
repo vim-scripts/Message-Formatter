@@ -1,8 +1,9 @@
-if ( exists( "g:MessageFormatter_loaded" ) )
+if ( exists( "g:MessageFormatter_loaded" || &compatible || version < 703 ) )
   finish
 endif
 
 let g:MessageFormatter_loaded = 1
+
 
 if ( !exists( "g:MessageFormatter_blankParameter" ) )
   let g:MessageFormatter_blankParameter = '`'
@@ -230,33 +231,111 @@ endfunction
 let s:openBrace  = '_OPEN_BRACE_'
 let s:closeBrace = '_CLOSE_BRACE_'
 
+" echo ExtractInnermostDefault( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
+function! ExtractInnermostDefault( line )
+  let defaultString  = "def "
+  let defaultLength  = strlen( defaultString )
+  let lineLength     = strlen( a:line )
+  let defaultDetails = {}
+
+  let defaultDetails.startIndex   = -1
+  let defaultDetails.endIndex     = -1
+  let defaultDetails.defaultValue = ''
+  let defaultDetails.modifiers    = ''
+  let defaultDetails.variable     = ''
+
+  let value = ''
+
+  let parsingDefault = 0
+
+  let parseDepth     = 0
+  let currentPointer = 0
+
+  while ( currentPointer < lineLength )
+    let char = a:line[ currentPointer ]
+
+    let currentPointer += 1
+
+    if ( char == '\' )
+      " Escaped character; put it in as is (still escaped).
+      if ( parsingDefault == 1 )
+        let value .= char . a:line[ currentPointer ]
+      endif
+
+      let currentPointer += 1
+    elseif ( char == '{' )
+      let newDirective = 0
+
+      " Might be the start of a default block; the next four characters have to be matched to see if they are "def ". An actual directive would have to be much longer
+      " because it has to be at least: {def a::a} (10 characters).
+      if ( currentPointer < lineLength - defaultLength )
+        let testCharacters = a:line[ currentPointer : currentPointer + defaultLength - 1 ]
+
+        if ( testCharacters == defaultString )
+          let defaultDetails.startIndex = currentPointer - 1
+          let currentPointer           += defaultLength
+          let parsingDefault            = 1
+          let value                     = ''
+          let newDirective              = 1
+        endif
+      endif
+
+      " Just another directive; if we're inside another default expression, continue collecting characters.
+      if ( newDirective == 0 && parsingDefault == 1 )
+        let value      .= char
+        let parseDepth += 1
+      endif
+    elseif ( char == '}' )
+      if ( parsingDefault == 1 )
+        " End of default
+        if ( parseDepth == 0 )
+          let parsingDefault          = 0
+          let defaultDetails.endIndex = currentPointer - 1
+
+          " SALMAN: Capture the value here
+          let [ expression, defaultDetails.defaultValue, defaultDetails.modifiers, defaultDetails.variable; remainder ] = matchlist( value, '\(.*\)::\%(\([^_]*\)_\)\=\(.*\)' )
+
+          break
+        else
+          let value .= char
+        endif
+
+        let parseDepth -= 1
+      endif
+    elseif ( parsingDefault == 1 )
+      let value .= char
+    endif
+  endwhile
+
+  return defaultDetails
+endfunction
+
+" Recursive def should work now; for example:
+" echo ExpandDefaultValues( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
 function! ExpandDefaultValues( line )
   let result = a:line
 
-  let searchExpression = '\C{def \(\%(\\[{}]\|[^{}]\)\{-}\)::\%(\(\%(\\[{}]\|[^{}]\)\{-}\)_\)\=\(\%(\\[{}]\|[^{}]\)\{-}\)}'
+  let blank = GetVar#GetVar( "MessageFormatter_blankParameter" )
 
-  " Replace the default values; this might need tweaking for recursion and other fancy constructs.
-  let s:numOptionalArguments = 0
-  let oldDefinition          = ''
   let prefixDefaults         = ''
+  let s:numOptionalArguments = 0
+  let defaultDetails         = ExtractInnermostDefault( result )
 
-  while ( result =~ searchExpression )
-    let oldDefinition                                           = result
-    let [ expression, defaultValue, modifiers, variable; rest ] = matchlist( result, searchExpression )
-    let result                                                  = substitute( result, searchExpression, s:openBrace . ( modifiers == '' ? '' : modifiers . '_' ) . '\3' . s:closeBrace, '' )
-
-    if ( oldDefinition != result )
-      " Put in the default value expression here.
-      let prefixDefaults .= "{eval {::p_temp" . s:numOptionalArguments . "} == '' ? {" . defaultValue . "::p_def" . s:numOptionalArguments . "} : {p_temp" . s:numOptionalArguments . "}::n_" . variable . "}"
+  while ( defaultDetails.startIndex != -1 )
+    if ( defaultDetails.defaultValue == '' )
+      let defaultDetails.defaultValue = blank
     endif
 
+    let prefixDefaults .= "{eval {::p_temp" . s:numOptionalArguments . "} == '' ? {" . defaultDetails.defaultValue . "::p_def" . s:numOptionalArguments . "} : {p_temp" . s:numOptionalArguments . "}::n_" . defaultDetails.variable . "}"
+
+    let result = result[ 0 : defaultDetails.startIndex ] . ( defaultDetails.modifiers == '' ? '' : defaultDetails.modifiers . '_' ) . defaultDetails.variable . result[ defaultDetails.endIndex : ]
+
+    let defaultDetails          = ExtractInnermostDefault( result )
     let s:numOptionalArguments += 1
   endwhile
 
   " Non-default parameters first; this way, when we apply arguments, the non-default ones get filled first, leaving a shortfall to fall to the default values.
   let result = result . prefixDefaults
-  let result = substitute( result, s:openBrace, '{', 'g' )
-  let result = substitute( result, s:closeBrace, '}', 'g' )
 
   return result
 endfunction
@@ -325,7 +404,7 @@ function! PlaceTemplateForLine( lineNumber )
     let snippetStart = line( "'[" )
     let snippetEnd   = line( "']" )
 
-    '[,']Formatvisualrange
+    '[,']Formatvisualrange 0
 
     execute snippetStart
 
@@ -381,7 +460,7 @@ com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 com! -nargs=? Listglobaltemplates call ShowTemplates( 'g', <q-args> )
 com! -nargs=? Listlocaltemplates call ShowTemplates( 'b', <q-args> )
 
-com! -range Formatvisualrange :call MessageFormatter#FormatVisualRange( <line1>, <line2> )
+com! -nargs=? -range Formatvisualrange :call MessageFormatter#FormatVisualRange( <line1>, <line2>, <q-args> )
 
 com! -nargs=+ Formatmessage echo FormatMessage( <q-args>, 0 )
 com! -nargs=+ Formatmessagerecursive echo FormatMessage( <q-args>, 1 )
@@ -438,7 +517,7 @@ if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
   Addglobaltemplate getset public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}\n\npublic void set{cf_property}( {type} val )\n{\nm_{c_property} = val;\n}
   Addglobaltemplate getseta public {::type} {eval '{type}' =~? 'boolean' ? 'is' : 'get'::get}{::cf_property}( int index )\n{\nreturn m_{c_property}[ index ];\n}\n\npublic void set{cf_property}( {type} val, int index )\n{\nm_{c_property}[ index ] = val;\n}
   Addglobaltemplate var {::type} {::c_var} = new {eval {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}::instanceType}();
-  Addglobaltemplate const public static final {::type} {::C_var} = {::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};
+  Addglobaltemplate const public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};
   Addglobaltemplate down {::subclass} {::variable} = ({subclass}) {::parentVariable};
   Addglobaltemplate safetern ( {::var} == null ? "" : {var} )
   Addglobaltemplate do do\n{\n|\n} while ( !jump! );

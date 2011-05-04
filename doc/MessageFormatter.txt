@@ -1,5 +1,21 @@
 *MessageFormatter.txt*  For Vim version 7.3     Last change: 2011 April 29
 
+TABLE OF CONTENTS                                       *MessageFormatter_toc*
+
+  1. Purpose                                        |MessageFormatter_Purpose|
+  2. Usage                                            |MessageFormatter_Usage|
+  3. Dependencies                              |MessageFormatter_Dependencies|
+  4. Options                                        |MessageFormatter_Options|
+  5. Mappings                                      |MessageFormatter_Mappings|
+  6. Commands                                      |MessageFormatter_Commands|
+  7. Patterns                                      |MessageFormatter_Patterns|
+  8. Pattern Modifiers                     |MessageFormatter_PatternModifiers|
+  9. Notes                                            |MessageFormatter_Notes|
+  10. Special Values                          |MessageFormatter_SpecialValues|
+  11. Tips                                             |MessageFormatter_Tips|
+  12. Examples                                     |MessageFormatter_Examples|
+
+
 PURPOSE                                             *MessageFormatter_Purpose*
 
 This plugin allows the simplification of repetitive code fragments, allowing
@@ -288,7 +304,7 @@ placed, so if a second template is placed before the first is expanded, the
 first will be forgotten.
 
 
-PATTERN MODIFIERS                          *MessageFormatter_patternModifiers*
+PATTERN MODIFIERS                          *MessageFormatter_PatternModifiers*
 
 Modifiers are supplied to prior to the variable name and are of the format >
         {modifiers_variableName}
@@ -341,7 +357,7 @@ NOTES                                                 *MessageFormatter_Notes*
   template with the same name will always be used instead of the global one.
 
 
-SPECIAL VALUES                                *MessageFormatter_specialValues*
+SPECIAL VALUES                                *MessageFormatter_SpecialValues*
 
 If the value for a particular parameter begins with one of these, it gets
 treated differently:
@@ -406,6 +422,16 @@ example).
   This might seem counterintuitive as the required value is, in fact, provided
   last.
 
+                                                   *MessageFormatter_emptyDef*
+
+An empty default value should be specified as >
+        {def ::someVar}
+<
+Note the space between the "def" and the "::"; simply using >
+        {def::someVar}
+<
+sets the value of "someVar" as "def".
+
 
 TIPS                                                   *MessageFormatter_Tips*
 
@@ -419,6 +445,82 @@ TIPS                                                   *MessageFormatter_Tips*
   the modifier (camel case to get "className" and then capitalize the first
   letter). >
         {::cf_var}
+<
+
+                                    *MessageFormatter_parameterExpansionOrder*
+
+- Templates with default variables apply parameters in this order:
+
+  - First, all non-optional (non-default value-supplied) variables are
+    fulfilled in the order they are seen.
+
+  - Any remaining parameters are then applied to the default varaibles, also
+    in the order they are seen.
+
+  To illustrate with an example, take this template: >
+        Addlocaltemplate test First name: {def john::t_fName}, last name: {::t_lName}, middle initial: {::u_middleInitial} and age: {def 25::age}.
+<
+  The arguments for this are provided as: >
+        test lName middleInitial fName age
+<
+  The two required arguments come first and the two optional arguments come
+  second. This cannot be changed. However, if the order of the two required
+  arguments needs to be reversed (maybe the middle initials make sense before
+  the last name), redefine the template as such: >
+        Addlocaltemplate test {::n_middleInitial}{::n_lName}First name: {def john::t_fName}, last name: {t_lName}, middle initial: {u_middleInitial} and age: {def 25::age}.
+<
+  The "n" modifier causes the value to be defined, but not displayed. The same
+  trick can be used for the default parameters to change their order as
+  desired, but again, the required parameters will be fulfilled first
+  irrespective of how they are defined in the template.
+
+  With or without default variables, recursive parameters are expanded with
+  the most deeply nested one first to allow outer ones to use the value
+  specified; for example: >
+        {ask {ask::fName} {ask::lName}::fullName} (first name {fName}, last name {lName}
+<
+  The above asks for "fName" first, then "lName" and, finally, for "fullName",
+  using the values for the first two as the default for the last.
+
+
+EXAMPLES                                           *MessageFormatter_Examples*
+
+Here are some 'filetype' specific templates that might be useful (for placing
+in the appropriate |ftplugin| files).
+
+  - Java for loop (only one required parameter: the end value) >
+        Addlocaltemplate for {{def i::c_var}::n_cVar}for ( int {cVar} = {def 0::start}; {cVar} {def <::compare} {::c_limit}; {cVar}++ )\n{\n!jump!\n}!jump!
+<
+  - JavaScript function definition (requires only the function name, which
+    gets camel-cased automatically) >
+        Addlocaltemplate fun function {::c_functionName} ({def ::s_args})\n{\n«»\n}
+<
+  - Vim plugin default mapping specification (requires the mapping expression
+    and the default mapping; optionally takes the mode, defaulting that to
+    "n") >
+        Addlocaltemplate mapping if ( !hasmapto( '<Plug>{::mapExpression}', '{def n::mode}' ) )\n{mode}map <silent> {::defaultMapping} <Plug>{mapExpression}\nendif
+<
+  - Vim plugin default option specification (takes the variable name and
+    value) >
+        Addlocaltemplate option if ( !exists( "g:{::var}" ) )\nlet g:{var} = {::value}\nendif
+<
+  - Vim expression to add a specified value to a variable (takes the variable
+    name, camcel casing it automatically and an optional increment) >
+        Addlocaltemplate + let {::c_var} += {def 1::increment}
+<
+  - Vim expression to make variable assignment (slightly) easier (for those
+    not used to typing "let" first); camel-cases only the left half because
+    the right might be an expression: >
+        Addlocaltemplate = let {::c_a} = {::b}
+<
+  - Vim version of a for loop (takes the name of the variable and the terminal
+    value): >
+        Addlocaltemplate for let {::c_var} = 0\n\nwhile ( {c_var} < {::terminalValue} )\n«»\n\nlet {c_var} += 1\nendwhile
+<
+  - XHTML input tag; takes the name of the input component, optionally taking
+    a type and value (defaults to "text" and no value, respectively); if no
+    value is provided, the value attribute is suppressed altogether: >
+        Addlocaltemplate input <input type={def text::q_type} id={::q_id} name={q_id} {def ::n_value}{eval {p_value} == '' ? '' : {value="{e_value}"::p_valueAttribute}::val}/>
 <
 
  vim:tw=78:ts=8:ft=help:norl:sw=8:et
