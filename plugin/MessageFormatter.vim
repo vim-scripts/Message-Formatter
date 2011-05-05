@@ -21,6 +21,10 @@ if ( !exists( "g:MessageFormatter_formatCurrentLineAsFallback" ) )
   let g:MessageFormatter_formatCurrentLineAsFallback = 1
 endif
 
+if ( !exists( "g:MessageFormatter_autoAddJumpToEnd" ) )
+  let g:MessageFormatter_autoAddJumpToEnd = 1
+endif
+
 function! FormatMessage( message, recursive )
   if ( !exists( "g:MessageFormatter_parameters" ) )
     return a:message
@@ -179,6 +183,8 @@ function! PlaceTemplateInText()
   let result = substitute( result, '{::', '{!jump!::', 'g' )
   " Convert newlines
   let result = substitute( result, '\\n', "\n", 'g' )
+
+  " SALMAN: If there are ny !jump! directives, make sure to add one at the very end to jump to.
   " Convert jump directives
   let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
 
@@ -193,7 +199,7 @@ function! PlaceTemplateInText()
   let b:MessageFormatter_snippetStart = line( "'[" )
   let b:MessageFormatter_snippetEnd   = line( "']" )
 
-  normal '[
+  normal '[0
 
   " Either the beginning of the line or a non-pipe character followed by a pipe followed by a non-pipe charcter or the end of the line. Forces the system to find
   " a single pipe character (avoiding the || boolean construct).
@@ -370,7 +376,11 @@ function! PlaceTemplateForLine( lineNumber )
 
     startinsert!
   elseif ( numArgs < ( numSplits - s:numOptionalArguments ) )
-    echo printf( "Not enough arguments; need at least %d (up to %d), including the command itself, but got only %d.", numSplits - s:numOptionalArguments, numSplits, numArgs )
+    if ( s:numOptionalArguments > 0 )
+      echo printf( "Not enough arguments; need at least %d (up to %d), including the command itself, but got only %d.", numSplits - s:numOptionalArguments, numSplits, numArgs )
+    else
+      echo printf( "Not enough arguments; need exactly %d, including the command itself, but got only %d.", numSplits, numArgs )
+    endif
 
     startinsert!
   else
@@ -393,6 +403,12 @@ function! PlaceTemplateForLine( lineNumber )
 
     " Convert newlines
     let result = substitute( result, '\\n', "\n", 'g' )
+
+    " If the expansion contains jump directives.
+    if ( GetVar#GetVar( "MessageFormatter_autoAddJumpToEnd" ) == 1 && result =~# '!jump!' && result !~# '!jump!$' )
+      let result .= '!jump!'
+    endif
+
     " Convert jump directives
     let result = substitute( result, '!jump!', jumpCharacters, 'g' )
 
@@ -407,6 +423,7 @@ function! PlaceTemplateForLine( lineNumber )
     '[,']Formatvisualrange 0
 
     execute snippetStart
+    normal! 0
 
     " If a jump marker is found, put the cursor there; otherwise, move it to the end of the expansion.
     let searchPosition = search( jumpCharacters, 'cW', snippetEnd )
@@ -520,7 +537,7 @@ if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
   Addglobaltemplate const public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};
   Addglobaltemplate down {::subclass} {::variable} = ({subclass}) {::parentVariable};
   Addglobaltemplate safetern ( {::var} == null ? "" : {var} )
-  Addglobaltemplate do do\n{\n|\n} while ( !jump! );
+  Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
   Addglobaltemplate eval {::expression} = {eval {expression}::expressionValue}
   Addglobaltemplate evalq {eval {::expression}::expressionValue}
 endif

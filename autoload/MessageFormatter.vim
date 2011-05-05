@@ -1,6 +1,11 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 6.0:
+"
+" Added an option: g:MessageFormatter_autoAddJumpToEnd; if this is 1 (the default) and if a parameter contains !jump! directives, another !jump! is added to the
+" end to allow the user to quickly continue typing beyond the template. See :help g:MessageFormatter_autoAddJumpToEnd
+"
 " Version 5.5:
 "
 " Fixed bug in default processing.

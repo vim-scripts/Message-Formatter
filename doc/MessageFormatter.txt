@@ -125,6 +125,24 @@ processor will process the current line as an ad-hoc template instead (same as
 |<Plug>FormatOneLine|); if this is set to 0 instead, the system will give an
 error message.
 
+                                         *g:MessageFormatter_autoAddJumpToEnd*
+
+If set to 1 (the default), and a template contains !jump! Directives, another
+one is added to the end of the directive to make it easier to jump to the end
+to continue typing. For example, this template ends up with an extra !jump! At
+the very end, >
+        Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
+<
+while this one does not: >
+        Addglobaltemplate safetern ( {::var} == null ? "" : {var} )
+<
+The mechanism is smart enough to only tweak those templates that don't already
+contain a !jump! directive at the very end, so you don't have to tweak legacy
+templates. If you only ever want the functionality to be available
+selectively, set |g:MessageFormatter_autoAddJumpToEnd| to 0 and add it
+manually to those templates where you want it.
+
+
 MAPPINGS                                           *MessageFormatter_Mappings*
 
                                                  *<Plug>FormatCurrentTemplate*
