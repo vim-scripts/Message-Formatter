@@ -377,9 +377,9 @@ function! PlaceTemplateForLine( lineNumber )
     startinsert!
   elseif ( numArgs < ( numSplits - s:numOptionalArguments ) )
     if ( s:numOptionalArguments > 0 )
-      echo printf( "Not enough arguments; need at least %d (up to %d), including the command itself, but got only %d.", numSplits - s:numOptionalArguments, numSplits, numArgs )
+      echo printf( "Not enough arguments for \"%s\"; need at least %d (up to %d), but got only %d.", templateName, numSplits - s:numOptionalArguments - 1, numSplits - 1, numArgs - 1 )
     else
-      echo printf( "Not enough arguments; need exactly %d, including the command itself, but got only %d.", numSplits, numArgs )
+      echo printf( "Not enough arguments for \"%s\"; need exactly %d, but got only %d.", templateName, numSplits - 1, numArgs - 1 )
     endif
 
     startinsert!

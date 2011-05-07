@@ -1,10 +1,18 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 6.5:
+"
+" New modifier:
+"
+" o: if the value is non-empty, prepends a ", " (a comma and a space); otherwise, leaves it empty
+" P: Just like 'p', but ignores empty strings
+" Q: Just like 'q', but ignores empty strings
+"
 " Version 6.0:
 "
 " Added an option: g:MessageFormatter_autoAddJumpToEnd; if this is 1 (the default) and if a parameter contains !jump! directives, another !jump! is added to the
-" end to allow the user to quickly continue typing beyond the template. See :help g:MessageFormatter_autoAddJumpToEnd
+" end to allow the user to quickly continue typing beyond the template. See :help g:MessageFormatter_autoAddJumpToEnd.
 "
 " Version 5.5:
 "
@@ -299,8 +307,11 @@
 " m: expects a number immediately after and repeats the text the specified number of times; no number is the same as 1. So, {m3_name} converts 'John' to
 " 'JohnJohnJohn' and {*::m30_v} becomes ******************************
 " n: Suppresses output; useful for adding the value to cache without actually displaying it
+" o: if the value is non-empty, prepends a ", " (a comma and a space); otherwise, leaves it empty
 " p: Wrap result in apostrophes, escaping single apostrophes with doubles (suitable for Vim literal string use)
+" P: Just like 'p', but ignores empty strings
 " q: Wrap result in quotes, escaping inner quotes and backslashes with backslashes
+" Q: Just like 'q', but ignores empty strings
 " s: If the result is empty, nothing; otherwise, wrap it in spaces. So, '0' becomes ' 0 ', but '' remains ''
 " t: title case the entire string
 " u: upper case
@@ -335,12 +346,18 @@ function! MessageFormatter#ModifyValue( value, modifiers )
       let result = escape( result, '"\' )
     elseif ( modifier ==# 'p' )
       let result = "'" . substitute( result, "'", "''", "g" ) . "'"
+    elseif ( modifier ==# 'P' )
+      let result = result == '' ? '' : "'" . substitute( result, "'", "''", "g" ) . "'"
     elseif ( modifier ==# 'q' )
       let result = '"' . escape( result, '"\' ) . '"'
+    elseif ( modifier ==# 'Q' )
+      let result = result == '' ? '' : '"' . escape( result, '"\' ) . '"'
     elseif ( modifier ==# 'n' )
       let result = ''
     elseif ( modifier ==# 's' )
       let result = result == '' ? result : ' ' . result . ' '
+    elseif ( modifier ==# 'o' )
+      let result = result == '' ? result : ', ' . result
     elseif ( modifier ==# 'm' )
       let multiplier = ''
 
@@ -405,7 +422,9 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
 
         if ( parameterValue =~# '^eval ' )
           let parameterValue = string( eval( substitute( parameterValue, '^eval ', '', '' ) ) )
-          let parameterValue = substitute( parameterValue, '^''\=\(.\{-}\)''\=$', '\1', 'g' )
+
+          " Remove up to two apostrophes from the outside; they are usually spurious--if not, will deal with it if needed.
+          let parameterValue = substitute( parameterValue, '^''\{,2}\(.\{-}\)''\{,2}$', '\1', 'g' )
         elseif ( parameterValue =~# 'ask\%( \|$\)' )
           let parameterValue = input( "Set '" . parameter . "' to: ", substitute( parameterValue, '^ask \=', '', '' ) )
         endif

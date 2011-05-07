@@ -344,8 +344,11 @@ while "lt" will do it the other way around.
        l      converts the entire thing to lower-case
        m      followed by a number, repeats string n times (default 1)
        n      suppresses output; useful for ensuring variable entry order
+       o      if the argument is non-empty, prepends a comma and a space
        p      wraps argument in apostrophes, escaping inner apostrophes
+       P      Same as "p", except that it doesn't modify empty values
        q      wraps argument in double quotes, escaping it as for "e"
+       Q      Same as "q", except that it doesn't modify empty values
        s      if the argument is non-empty, wraps it in spaces
        t      Title Cases The Entire Argument
        u      UPPER CASES THE ARGUMENT
