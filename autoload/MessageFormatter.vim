@@ -1,6 +1,16 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 7.0:
+"
+" New option: g:MessageFormatter_moveArgumentsToStart; if 1 (the default), input arguments are moved to the front for easier expansion. See :help
+" g:MessageFormatter_moveArgumentsToStart for details.
+"
+" More new options: g:MessageFormatter_highlightDirectives and g:MessageFormatter_highlightDirectivesLink; control the highlighting of directives in text to
+" make them stand out.
+"
+" New command: Setcolordirectives: toggles the directive highlighting feature.
+"
 " Version 6.5:
 "
 " New modifier:
@@ -580,7 +590,6 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
       let value = substitute( value, s:escapeCloseBrace, '}', 'g' )
 
       let s:MessageFormatter_parameters[ variable ] = value == GetVar#GetVar( "MessageFormatter_jumpMarker" ) || value == GetVar#GetVar( "MessageFormatter_blankParameter" ) ? '' : value
-      " let s:MessageFormatter_parameters[ variable ] = value
 
       let replacement = modifiers == '' ? '\4' : '\3_\4'
       let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1_OPEN_DIRECTIVE_BRACE_' . replacement . '_CLOSE_DIRECTIVE_BRACE_\5', '' )

@@ -1,4 +1,4 @@
-*MessageFormatter.txt*  For Vim version 7.3     Last change: 2011 April 29
+*MessageFormatter.txt*       For Vim Version 7.3      Last change: 2011 May 06
 
 TABLE OF CONTENTS                                       *MessageFormatter_toc*
 
@@ -16,6 +16,7 @@ TABLE OF CONTENTS                                       *MessageFormatter_toc*
   12. Examples                                     |MessageFormatter_Examples|
 
 
+==============================================================================
 PURPOSE                                             *MessageFormatter_Purpose*
 
 This plugin allows the simplification of repetitive code fragments, allowing
@@ -61,11 +62,13 @@ Observe, also, how the "fullName" directive recursively contained and expanded
 the fName directive.
 
 
+==============================================================================
 USAGE                                                 *MessageFormatter_Usage*
 
 For basic usage, see |MessageFormatter_Commands| and |MessageFormatter_Mappings|.
 
 
+==============================================================================
 DEPENDENCIES                                   *MessageFormatter_Dependencies*
 
 This plugin depends on my GetVar.vim, which may be downloaded from
@@ -73,6 +76,7 @@ http://www.vim.org/scripts/script.php?script_id=353. This allows you to set
 all the options on a per window, buffer, tab or global basis.
 
 
+==============================================================================
 OPTIONS                                             *MessageFormatter_Options*
 
                                            *g:MessageFormatter_blankParameter*
@@ -142,7 +146,52 @@ templates. If you only ever want the functionality to be available
 selectively, set |g:MessageFormatter_autoAddJumpToEnd| to 0 and add it
 manually to those templates where you want it.
 
+                                      *g:MessageFormatter_highlightDirectives*
 
+If 1 (defaults to 1), directives of one of these formats are highlighted: >
+        {::modifiers_directiveName}
+        {::directiveName}
+        {«»::directiveName}
+        {«»::modifiers_directiveName}
+<
+Where «» is whatever |g:MessageFormatter_jumpMarker| is set to.
+
+                                  *g:MessageFormatter_highlightDirectivesLink*
+
+Defaults to "Error". The syntax item to which the directives are linked for
+highlighting.
+
+                                     *g:MessageFormatter_moveArgumentsToStart*
+
+If 1 (the default), then all input arguments are moved to the beginning of the
+expression when using |<Plug>PlaceTemplateInText|. For example, this template >
+        Addlocaltemplate + let {::c_var} += {def 1::increment}
+<
+will expand to >
+        {|::n_var}{«»::n_override-increment}let {c_var} += {increment}{eval {p_override-increment} == '' ? {1::p_default-increment} : {p_override-increment}::n_increment}
+<
+placing both "var" and the override for the default value for "increment" at
+the very beginning of the template, making it easier to enter the values. As
+before, the default parameters come after the non-default ones and are
+characterized by their names being prefixed with the word "override" (the
+actual default value can be seen later as it is prefixed with the word
+"default").
+
+For the sake of comparison, if the option is 0, this is what the template
+expands to: >
+        let {|::c_var} += {increment}{eval {«»::p_override-increment} == '' ? {1::p_default-increment} : {p_override-increment}::n_increment}
+<
+The end result is exactly the same, but the parameters are now in the middle
+of the expression as entered when defining the template instead of at the
+beignning.
+
+In both cases, | marks the location of the cursor.
+
+Note that this option has no bearing when using |<Plug>PlaceTemplateForLine|
+because the expansion there isn't done inline, anyway.
+
+
+==============================================================================
 MAPPINGS                                           *MessageFormatter_Mappings*
 
                                                  *<Plug>FormatCurrentTemplate*
@@ -232,6 +281,7 @@ Note:   |<Plug>PlaceTemplateInText| looks only at the current word so is useful
         up front.
 
 
+==============================================================================
 COMMANDS                                           *MessageFormatter_Commands*
 
                                                            *Addglobaltemplate*
@@ -265,7 +315,14 @@ parameters; best called from mappings rather than directly, though you can
 select a range of lines and call it on that (|<Plug>FormatVisualRange| does just
 that, in fact).
 
+                                                          *Setcolordirectives*
 
+Takes one argument (1 or 0); if 1, enables the highlighting of directives (see
+g:MessageFormatter_highlightDirectives|) in text when placed through
+|<Plug>PlaceTemplateInText| or manually for one-time expansion.
+
+
+==============================================================================
 PATTERNS                                           *MessageFormatter_Patterns*
 
                                                    *MessageFormatter_example1*
@@ -322,6 +379,7 @@ placed, so if a second template is placed before the first is expanded, the
 first will be forgotten.
 
 
+==============================================================================
 PATTERN MODIFIERS                          *MessageFormatter_PatternModifiers*
 
 Modifiers are supplied to prior to the variable name and are of the format >
@@ -368,6 +426,7 @@ Here are some examples:
                   {++::m5q_var}        "++++++++++"
 
 
+==============================================================================
 NOTES                                                 *MessageFormatter_Notes*
 
 - Patterns replace all \n instances (backslashes followed by 'n') with
@@ -378,6 +437,7 @@ NOTES                                                 *MessageFormatter_Notes*
   template with the same name will always be used instead of the global one.
 
 
+==============================================================================
 SPECIAL VALUES                                *MessageFormatter_SpecialValues*
 
 If the value for a particular parameter begins with one of these, it gets
@@ -454,6 +514,7 @@ Note the space between the "def" and the "::"; simply using >
 sets the value of "someVar" as "def".
 
 
+==============================================================================
 TIPS                                                   *MessageFormatter_Tips*
 
 - To get snake_case_variable_name type variables while starting with "snake
@@ -504,6 +565,7 @@ TIPS                                                   *MessageFormatter_Tips*
   using the values for the first two as the default for the last.
 
 
+==============================================================================
 EXAMPLES                                           *MessageFormatter_Examples*
 
 Here are some 'filetype' specific templates that might be useful (for placing

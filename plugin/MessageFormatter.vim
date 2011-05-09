@@ -25,6 +25,18 @@ if ( !exists( "g:MessageFormatter_autoAddJumpToEnd" ) )
   let g:MessageFormatter_autoAddJumpToEnd = 1
 endif
 
+if ( !exists( "g:MessageFormatter_highlightDirectives" ) )
+  let g:MessageFormatter_highlightDirectives = 1
+endif
+
+if ( !exists( "g:MessageFormatter_highlightDirectivesLink" ) )
+  let g:MessageFormatter_highlightDirectivesLink = 'Error'
+endif
+
+if ( !exists( "g:MessageFormatter_moveArgumentsToStart" ) )
+let g:MessageFormatter_moveArgumentsToStart = 1
+endif
+
 function! FormatMessage( message, recursive )
   if ( !exists( "g:MessageFormatter_parameters" ) )
     return a:message
@@ -173,10 +185,20 @@ function! PlaceTemplateInText()
 
   let result = GetTemplateDefinition( templateName )
 
-  let result = ExpandDefaultValues( result )
+  let result = ExpandDirectiveValues( result )
 
-  " Used to do this right in the AddMessageFormatterTemplate but it's easier to do it here on demand in case they have already provided the arguments on the
-  " command-line.
+  if ( GetVar#GetVar( 'MessageFormatter_moveArgumentsToStart' ) == 1 )
+    let args                     = ''
+    let inputDirectiveExpression = '{::\([^_}]*_\)\=\([^}]*\)}'
+
+    while ( result =~ inputDirectiveExpression )
+      let args .= substitute( result, '.\{-}' . inputDirectiveExpression . '.*', '{::n_\2}', '' )
+      let result = substitute( result, inputDirectiveExpression, '{\1\2}', '' )
+    endwhile
+
+    let result = args . result
+  endif
+
   " Make the first one the cursor location.
   let result = substitute( result, '{::', '{|::', '' )
   " Make the rest placeholders for jumping.
@@ -237,18 +259,21 @@ endfunction
 let s:openBrace  = '_OPEN_BRACE_'
 let s:closeBrace = '_CLOSE_BRACE_'
 
-" echo ExtractInnermostDefault( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
-function! ExtractInnermostDefault( line )
-  let defaultString  = "def "
-  let defaultLength  = strlen( defaultString )
+" echo ExtractInnermostDirective( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
+" echo ExtractInnermostDirective( "public static final {::type} {::C_var} = {sub {p_var}, '[aeiou]', '1', 'g'::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
+function! ExtractInnermostDirective( line )
+  " let directiveExpression  = '\%(sub\|def\) '
+  let directiveExpression  = '\%(def\) '
+  let directiveLength  = 4
   let lineLength     = strlen( a:line )
-  let defaultDetails = {}
+  let directiveDetails = {}
 
-  let defaultDetails.startIndex   = -1
-  let defaultDetails.endIndex     = -1
-  let defaultDetails.defaultValue = ''
-  let defaultDetails.modifiers    = ''
-  let defaultDetails.variable     = ''
+  let directiveDetails.directive    = ''
+  let directiveDetails.startIndex   = -1
+  let directiveDetails.endIndex     = -1
+  let directiveDetails.defaultValue = ''
+  let directiveDetails.modifiers    = ''
+  let directiveDetails.variable     = ''
 
   let value = ''
 
@@ -274,15 +299,16 @@ function! ExtractInnermostDefault( line )
 
       " Might be the start of a default block; the next four characters have to be matched to see if they are "def ". An actual directive would have to be much longer
       " because it has to be at least: {def a::a} (10 characters).
-      if ( currentPointer < lineLength - defaultLength )
-        let testCharacters = a:line[ currentPointer : currentPointer + defaultLength - 1 ]
+      if ( currentPointer < lineLength - directiveLength )
+        let testCharacters = a:line[ currentPointer : currentPointer + directiveLength - 1 ]
 
-        if ( testCharacters == defaultString )
-          let defaultDetails.startIndex = currentPointer - 1
-          let currentPointer           += defaultLength
-          let parsingDefault            = 1
-          let value                     = ''
-          let newDirective              = 1
+        if ( testCharacters =~# directiveExpression )
+          let directiveDetails.startIndex = currentPointer - 1
+          let directiveDetails.directive  = testCharacters
+          let currentPointer             += directiveLength
+          let parsingDefault              = 1
+          let value                       = ''
+          let newDirective                = 1
         endif
       endif
 
@@ -295,11 +321,10 @@ function! ExtractInnermostDefault( line )
       if ( parsingDefault == 1 )
         " End of default
         if ( parseDepth == 0 )
-          let parsingDefault          = 0
-          let defaultDetails.endIndex = currentPointer - 1
+          let parsingDefault            = 0
+          let directiveDetails.endIndex = currentPointer - 1
 
-          " SALMAN: Capture the value here
-          let [ expression, defaultDetails.defaultValue, defaultDetails.modifiers, defaultDetails.variable; remainder ] = matchlist( value, '\(.*\)::\%(\([^_]*\)_\)\=\(.*\)' )
+          let [ expression, directiveDetails.defaultValue, directiveDetails.modifiers, directiveDetails.variable; remainder ] = matchlist( value, '\(.*\)::\%(\([^_]*\)_\)\=\(.*\)' )
 
           break
         else
@@ -313,30 +338,36 @@ function! ExtractInnermostDefault( line )
     endif
   endwhile
 
-  return defaultDetails
+  return directiveDetails
 endfunction
 
 " Recursive def should work now; for example:
-" echo ExpandDefaultValues( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
-function! ExpandDefaultValues( line )
+" echo ExpandDirectiveValues( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
+function! ExpandDirectiveValues( line )
   let result = a:line
 
   let blank = GetVar#GetVar( "MessageFormatter_blankParameter" )
 
   let prefixDefaults         = ''
   let s:numOptionalArguments = 0
-  let defaultDetails         = ExtractInnermostDefault( result )
+  let directiveDetails       = ExtractInnermostDirective( result )
 
-  while ( defaultDetails.startIndex != -1 )
-    if ( defaultDetails.defaultValue == '' )
-      let defaultDetails.defaultValue = blank
+  while ( directiveDetails.endIndex != -1 )
+    if ( directiveDetails.directive ==# 'def ' )
+      if ( directiveDetails.defaultValue == '' )
+        let directiveDetails.defaultValue = blank
+      endif
+
+      " Capitalize first letter.
+      " let variableName = substitute( directiveDetails.variable, '^.', '\u&', '\1' )
+      let variableName = directiveDetails.variable
+
+      let prefixDefaults .= "{eval {::p_override-" . variableName . "} == '' ? {" . directiveDetails.defaultValue . "::p_default-" . variableName . "} : {p_override-" . variableName . "}::n_" . directiveDetails.variable . "}"
+
+      let result = result[ 0 : directiveDetails.startIndex ] . ( directiveDetails.modifiers == '' ? '' : directiveDetails.modifiers . '_' ) . directiveDetails.variable . result[ directiveDetails.endIndex : ]
     endif
 
-    let prefixDefaults .= "{eval {::p_temp" . s:numOptionalArguments . "} == '' ? {" . defaultDetails.defaultValue . "::p_def" . s:numOptionalArguments . "} : {p_temp" . s:numOptionalArguments . "}::n_" . defaultDetails.variable . "}"
-
-    let result = result[ 0 : defaultDetails.startIndex ] . ( defaultDetails.modifiers == '' ? '' : defaultDetails.modifiers . '_' ) . defaultDetails.variable . result[ defaultDetails.endIndex : ]
-
-    let defaultDetails          = ExtractInnermostDefault( result )
+    let directiveDetails        = ExtractInnermostDirective( result )
     let s:numOptionalArguments += 1
   endwhile
 
@@ -365,7 +396,7 @@ function! PlaceTemplateForLine( lineNumber )
   let templateName       = args[ 0 ]
   let templateDefinition = GetTemplateDefinition( templateName )
 
-  let templateDefinition = ExpandDefaultValues( templateDefinition )
+  let templateDefinition = ExpandDirectiveValues( templateDefinition )
 
   " By keeping the empty result, the first value can always be prepended as is--if the expression starts with a variable, it'll just be the empty string.
   let splitted  = split( templateDefinition, "{::", 1 )
@@ -471,6 +502,25 @@ function! ShowTemplates( scope, templateName )
   endtry
 endfunction
 
+" This should be an option.
+function! s:ColorDirectives()
+  execute 'syntax match MessageFormatter_Directive ''{\%(' . GetVar#GetVar( 'MessageFormatter_jumpMarker' ) . '\)\=::.\{-}}'' containedin=ALL'
+endfunction
+
+function! SetColorDirectives( enable )
+  augroup MessageFormatter
+    au!
+    if ( a:enable )
+      au Syntax * call s:ColorDirectives()
+      au ColorScheme * call s:ColorDirectives()
+
+      call s:ColorDirectives()
+    else
+      syntax clear MessageFormatter_Directive
+    endif
+  augroup END
+endfunction
+
 com! -nargs=+ Addglobaltemplate call AddMessageFormatterTemplate( 1, <q-args> )
 com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 
@@ -486,6 +536,16 @@ com! -nargs=+ Addformatparameter call AddFormatParameters( <q-args> )
 com! -nargs=+ Adddictionaryformatparameter call AddDictionaryFormatParameter( <q-args> )
 com! Showparameters echo GetVar#GetSafe( "g:MessageFormatter_parameters", "<No parameters have been defined.>" )
 com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
+
+com! -nargs=1 Setcolordirectives call SetColorDirectives( <args> )
+
+
+execute 'hi link MessageFormatter_Directive ' . GetVar#GetVar( 'MessageFormatter_highlightDirectivesLink' )
+
+if ( GetVar#GetVar( 'MessageFormatter_highlightDirectives' ) == 1 )
+  Setcolordirectives 1
+endif
+
 
 " SALMAN: Create another mechanism for a set of fixed values to be used. Let user select first few letters of one of these values instead of the whole thing; in
 " case of ambiguity, first match works.
@@ -529,6 +589,7 @@ vmap <Plug>FormatVisualRange :Formatvisualrange<cr>
 nmap <Plug>FormatOpModeTemplate :set opfunc=MessageFormatter#FormatOpModeTemplate<cr>g@
 
 if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
+  Addglobaltemplate p {def ::n_value}{def protected::scope} {::type} m_{::c_var}{eval {p_value} == '' ? '' : ' = {value}'::expandedValue};
   Addglobaltemplate get public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}
   Addglobaltemplate set public void set{::cf_property}( {::type} val )\n{\nm_{c_property} = val;\n}
   Addglobaltemplate getset public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}\n\npublic void set{cf_property}( {type} val )\n{\nm_{c_property} = val;\n}
@@ -540,4 +601,5 @@ if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
   Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
   Addglobaltemplate eval {::expression} = {eval {expression}::expressionValue}
   Addglobaltemplate evalq {eval {::expression}::expressionValue}
+  Addglobaltemplate sep {eval strpart( repeat( {def =::p_separator}, {def &tw::length} ), 0, {length} )::line}
 endif
