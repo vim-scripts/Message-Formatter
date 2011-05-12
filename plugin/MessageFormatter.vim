@@ -34,7 +34,11 @@ if ( !exists( "g:MessageFormatter_highlightDirectivesLink" ) )
 endif
 
 if ( !exists( "g:MessageFormatter_moveArgumentsToStart" ) )
-let g:MessageFormatter_moveArgumentsToStart = 1
+  let g:MessageFormatter_moveArgumentsToStart = 1
+endif
+
+if ( !exists( "g:MessageFormatter_highlightDirectiveModifiersLink" ) )
+  let g:MessageFormatter_highlightDirectiveModifiersLink = 'Constant'
 endif
 
 function! FormatMessage( message, recursive )
@@ -165,12 +169,6 @@ function! FormatContainedMessage( text, ... )
   return MessageFormatter#FormatMessage( messageToFormat, s:MessageFormatter_parameters, 1, exists( "a:1" ) && a:1 == 1 )
 endfunction
 
-" Where the cursor should go.
-" |
-" |
-" a|b
-" ||
-" \%(^\|[^|]\)\zs|\ze\%([^|]\|$\)
 function! PlaceTemplateInText()
   " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
   execute "normal! i\<c-g>u"
@@ -185,28 +183,33 @@ function! PlaceTemplateInText()
 
   let result = GetTemplateDefinition( templateName )
 
+  let result = ExpandDirectiveValues( result, 'tem' )
   let result = ExpandDirectiveValues( result )
+  let result = ConsolidateDuplicateDirectives( result )
 
   if ( GetVar#GetVar( 'MessageFormatter_moveArgumentsToStart' ) == 1 )
-    let args                     = ''
-    let inputDirectiveExpression = '{::\([^_}]*_\)\=\([^}]*\)}'
+    let args = ''
 
-    while ( result =~ inputDirectiveExpression )
-      let args .= substitute( result, '.\{-}' . inputDirectiveExpression . '.*', '{::n_\2}', '' )
-      let result = substitute( result, inputDirectiveExpression, '{\1\2}', '' )
+    while ( result =~ s:inputDirectiveExpression )
+      let args .= substitute( result, '.\{-}' . s:inputDirectiveExpression . '.*', '{::n_\2}', '' )
+      let result = substitute( result, s:inputDirectiveExpression, '{\1\2}', '' )
     endwhile
 
     let result = args . result
   endif
 
   " Make the first one the cursor location.
-  let result = substitute( result, '{::', '{|::', '' )
+  " let result = substitute( result, '{::', '{|::', '' )
   " Make the rest placeholders for jumping.
   let result = substitute( result, '{::', '{!jump!::', 'g' )
   " Convert newlines
   let result = substitute( result, '\\n', "\n", 'g' )
 
-  " SALMAN: If there are ny !jump! directives, make sure to add one at the very end to jump to.
+  " If the expansion contains jump directives.
+  if ( GetVar#GetVar( "MessageFormatter_autoAddJumpToEnd" ) == 1 && result =~# '!jump!' && result !~# '!jump!$' )
+    let result .= '!jump!'
+  endif
+
   " Convert jump directives
   let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
 
@@ -221,19 +224,7 @@ function! PlaceTemplateInText()
   let b:MessageFormatter_snippetStart = line( "'[" )
   let b:MessageFormatter_snippetEnd   = line( "']" )
 
-  normal '[0
-
-  " Either the beginning of the line or a non-pipe character followed by a pipe followed by a non-pipe charcter or the end of the line. Forces the system to find
-  " a single pipe character (avoiding the || boolean construct).
-  let searchPosition = search( '\%(^\|[^|]\)\zs|\ze\%([^|]\|$\)', 'cW', line( "']" ) )
-
-  if ( searchPosition > 0 )
-    normal "_x
-    startinsert
-  else
-    normal ']
-    startinsert!
-  endif
+  call MessageFormatter#EditFirstJumpLocation( b:MessageFormatter_snippetStart, b:MessageFormatter_snippetEnd )
 endfunction
 
 function! GetTemplateDefinition( templateName )
@@ -261,12 +252,12 @@ let s:closeBrace = '_CLOSE_BRACE_'
 
 " echo ExtractInnermostDirective( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
 " echo ExtractInnermostDirective( "public static final {::type} {::C_var} = {sub {p_var}, '[aeiou]', '1', 'g'::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
-function! ExtractInnermostDirective( line )
+function! ExtractInnermostDirective( line, ... )
   " let directiveExpression  = '\%(sub\|def\) '
-  let directiveExpression  = '\%(def\) '
-  let directiveLength  = 4
-  let lineLength     = strlen( a:line )
-  let directiveDetails = {}
+  let directiveExpression = '\%(' . ( exists( "a:1" ) ? a:1 : 'def ' ) . '\) '
+  let directiveLength     = 4
+  let lineLength          = strlen( a:line )
+  let directiveDetails    = {}
 
   let directiveDetails.directive    = ''
   let directiveDetails.startIndex   = -1
@@ -343,14 +334,15 @@ endfunction
 
 " Recursive def should work now; for example:
 " echo ExpandDirectiveValues( "public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};" )
-function! ExpandDirectiveValues( line )
+function! ExpandDirectiveValues( line, ... )
   let result = a:line
 
-  let blank = GetVar#GetVar( "MessageFormatter_blankParameter" )
+  let blank     = GetVar#GetVar( "MessageFormatter_blankParameter" )
+  let directive = exists( "a:1" ) ? a:1 : 'def'
 
   let prefixDefaults         = ''
   let s:numOptionalArguments = 0
-  let directiveDetails       = ExtractInnermostDirective( result )
+  let directiveDetails       = ExtractInnermostDirective( result, directive )
 
   while ( directiveDetails.endIndex != -1 )
     if ( directiveDetails.directive ==# 'def ' )
@@ -365,14 +357,49 @@ function! ExpandDirectiveValues( line )
       let prefixDefaults .= "{eval {::p_override-" . variableName . "} == '' ? {" . directiveDetails.defaultValue . "::p_default-" . variableName . "} : {p_override-" . variableName . "}::n_" . directiveDetails.variable . "}"
 
       let result = result[ 0 : directiveDetails.startIndex ] . ( directiveDetails.modifiers == '' ? '' : directiveDetails.modifiers . '_' ) . directiveDetails.variable . result[ directiveDetails.endIndex : ]
+    elseif ( directiveDetails.directive ==# 'tem ' )
+      " If the match is at index 0, directiveDetails.startIndex - 1 becomes -1, which means the entire string, which isn't what we want (we want the empty string).
+      let tempResult = directiveDetails.startIndex > 0 ? result[ 0 : directiveDetails.startIndex - 1 ] : ''
+      let result     = tempResult . GetTemplateDefinition( directiveDetails.defaultValue ) . result[ ( directiveDetails.endIndex + 1 ) : ]
     endif
 
-    let directiveDetails        = ExtractInnermostDirective( result )
+    let directiveDetails        = ExtractInnermostDirective( result, directive )
     let s:numOptionalArguments += 1
   endwhile
 
   " Non-default parameters first; this way, when we apply arguments, the non-default ones get filled first, leaving a shortfall to fall to the default values.
   let result = result . prefixDefaults
+
+  return result
+endfunction
+
+let s:inputDirectiveExpression = '{::\([^_}]*_\)\=\([^}]*\)}'
+
+function! ConsolidateDuplicateDirectives( line )
+  " For each input directive, add the variable name to a dictionary. If it is already on the dictionary, remove the :: bit from it.
+  let existingVariables = {}
+  let result            = ''
+  let startIndex        = 0
+  let matchIndex        = match( a:line, s:inputDirectiveExpression, startIndex )
+
+  while( matchIndex >= 0 )
+    let result .= a:line[ startIndex : matchIndex ]
+    let [ original, modifier, variable; remainder ] = matchlist( a:line, '.\{' . matchIndex . '}' . s:inputDirectiveExpression . '.*' )
+
+    if ( !has_key( existingVariables, variable ) )
+      let result .= '::'
+
+      let existingVariables[ variable ] = ''
+    endif
+
+    let result .= modifier . variable
+    let result .= '}'
+
+    let startIndex = matchend( a:line, s:inputDirectiveExpression, startIndex )
+    let matchIndex = match( a:line, s:inputDirectiveExpression, startIndex )
+  endwhile
+
+  let result .= a:line[ startIndex : ]
 
   return result
 endfunction
@@ -396,7 +423,9 @@ function! PlaceTemplateForLine( lineNumber )
   let templateName       = args[ 0 ]
   let templateDefinition = GetTemplateDefinition( templateName )
 
+  let templateDefinition = ExpandDirectiveValues( templateDefinition, 'tem' )
   let templateDefinition = ExpandDirectiveValues( templateDefinition )
+  let templateDefinition = ConsolidateDuplicateDirectives( templateDefinition )
 
   " By keeping the empty result, the first value can always be prepended as is--if the expression starts with a variable, it'll just be the empty string.
   let splitted  = split( templateDefinition, "{::", 1 )
@@ -453,19 +482,7 @@ function! PlaceTemplateForLine( lineNumber )
 
     '[,']Formatvisualrange 0
 
-    execute snippetStart
-    normal! 0
-
-    " If a jump marker is found, put the cursor there; otherwise, move it to the end of the expansion.
-    let searchPosition = search( jumpCharacters, 'cW', snippetEnd )
-
-    if ( searchPosition > 0 )
-      execute 'normal "_' . strlen( jumpCharacters ) . 'x'
-      startinsert
-    else
-      normal ']
-      startinsert!
-    endif
+    call MessageFormatter#EditFirstJumpLocation( snippetStart, snippetEnd )
   endif
 endfunction
 
@@ -504,6 +521,8 @@ endfunction
 
 " This should be an option.
 function! s:ColorDirectives()
+  " syn match MessageFormatter_DirectiveDefaults '[:_]\zs\%(override\|default\)' containedin=MessageFormatter_Directive
+  syntax match MessageFormatter_DirectiveModifiers '::\zs[^_}]*\ze_' containedin=MessageFormatter_Directive
   execute 'syntax match MessageFormatter_Directive ''{\%(' . GetVar#GetVar( 'MessageFormatter_jumpMarker' ) . '\)\=::.\{-}}'' containedin=ALL'
 endfunction
 
@@ -516,6 +535,7 @@ function! SetColorDirectives( enable )
 
       call s:ColorDirectives()
     else
+      syntax clear MessageFormatter_DirectiveModifiers
       syntax clear MessageFormatter_Directive
     endif
   augroup END
@@ -540,6 +560,7 @@ com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
 com! -nargs=1 Setcolordirectives call SetColorDirectives( <args> )
 
 
+execute 'hi link MessageFormatter_DirectiveModifiers ' . GetVar#GetVar( 'MessageFormatter_highlightDirectiveModifiersLink' )
 execute 'hi link MessageFormatter_Directive ' . GetVar#GetVar( 'MessageFormatter_highlightDirectivesLink' )
 
 if ( GetVar#GetVar( 'MessageFormatter_highlightDirectives' ) == 1 )
@@ -589,16 +610,6 @@ vmap <Plug>FormatVisualRange :Formatvisualrange<cr>
 nmap <Plug>FormatOpModeTemplate :set opfunc=MessageFormatter#FormatOpModeTemplate<cr>g@
 
 if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
-  Addglobaltemplate p {def ::n_value}{def protected::scope} {::type} m_{::c_var}{eval {p_value} == '' ? '' : ' = {value}'::expandedValue};
-  Addglobaltemplate get public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}
-  Addglobaltemplate set public void set{::cf_property}( {::type} val )\n{\nm_{c_property} = val;\n}
-  Addglobaltemplate getset public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}\n\npublic void set{cf_property}( {type} val )\n{\nm_{c_property} = val;\n}
-  Addglobaltemplate getseta public {::type} {eval '{type}' =~? 'boolean' ? 'is' : 'get'::get}{::cf_property}( int index )\n{\nreturn m_{c_property}[ index ];\n}\n\npublic void set{cf_property}( {type} val, int index )\n{\nm_{c_property}[ index ] = val;\n}
-  Addglobaltemplate var {::type} {::c_var} = new {eval {p_type} =~# '^List' ? 'Array{type}' : {p_type} =~# '^Map' ? 'Hash{type}' : {p_type}::instanceType}();
-  Addglobaltemplate const public static final {::type} {::C_var} = {def {var}::n_value}{eval '{type}' == 'String' ? {qp_value} : {p_value}::parsedValue};
-  Addglobaltemplate down {::subclass} {::variable} = ({subclass}) {::parentVariable};
-  Addglobaltemplate safetern ( {::var} == null ? "" : {var} )
-  Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
   Addglobaltemplate eval {::expression} = {eval {expression}::expressionValue}
   Addglobaltemplate evalq {eval {::expression}::expressionValue}
   Addglobaltemplate sep {eval strpart( repeat( {def =::p_separator}, {def &tw::length} ), 0, {length} )::line}

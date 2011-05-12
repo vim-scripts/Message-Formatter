@@ -1,6 +1,10 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 7.5:
+"
+" New special value: "tem" to include other template definitions inline; see :help MessageFormatter_tem.
+"
 " Version 7.0:
 "
 " New option: g:MessageFormatter_moveArgumentsToStart; if 1 (the default), input arguments are moved to the front for easier expansion. See :help
@@ -92,10 +96,10 @@
 "
 " Another one:
 "
-" Addglobaltemplate do do\n{\n|\n} while ( !jump! );
+" Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
 "
 " Type do and hit the mapping for <Plug>PlaceTemplateInText and it will replace the word with the expansion in place (can be used with 'var', also), moving the
-" cursor to the | and replacing the !jump! with jump characters.
+" cursor to the first !jump! and replacing the other !jump! with jump characters.
 "
 " If the <Plug>PlaceTemplateInText mapping is used for expansions such as 'var'' above, the cursor goes to the first {::...} variable and all others change to
 " {!jump!::...} so a jump hotkey (assuming there is a jumper plugin installed) will move from one to the next. Once the values have been entered, hit the hotkey
@@ -495,6 +499,45 @@ function! MessageFormatter#FormatOpModeTemplate( type, ... )
   execute "'[,']Formatvisualrange"
 endfunction
 
+function! MessageFormatter#EditFirstJumpLocation( startLine, endLine )
+  " Where the cursor should go.
+  " |
+  " |
+  " a|b
+  " ||
+  " \%(^\|[^|]\)\zs|\ze\%([^|]\|$\)
+  "
+  " Either the beginning of the line or a non-pipe character followed by a pipe followed by a non-pipe charcter or the end of the line. Forces the system to find
+  " a single pipe character (avoiding the || boolean construct).
+  " let searchPosition = search( '\%(^\|[^|]\)\zs|\ze\%([^|]\|$\)', 'cW', line( "']" ) )
+
+  " Go to the beginning of the snippet
+  execute a:startLine
+  normal! 0
+
+  let jumpCharacters = GetVar#GetVar( "MessageFormatter_jumpMarker" )
+
+  " If a jump marker is found, put the cursor there; otherwise, move it to the end of the expansion.
+  let searchPosition = search( jumpCharacters, 'cW', a:endLine )
+
+  " Fix this if at end of line... if col at end of line == searchPosition + length of strlen...
+  if ( searchPosition > 0 )
+    let cursorPositionFromLine = col( '$' ) - col( '.' )
+
+    execute 'normal "_' . strlen( jumpCharacters ) . 'x'
+
+    " End of line
+    if ( cursorPositionFromLine == strlen( jumpCharacters ) )
+      startinsert!
+    else
+      startinsert
+    endif
+  else
+    normal ']
+    startinsert!
+  endif
+endfunction
+
 function! MessageFormatter#FormatCurrentTemplate( endInInsertMode )
   let error = ''
 
@@ -509,13 +552,9 @@ function! MessageFormatter#FormatCurrentTemplate( endInInsertMode )
 
       execute b:MessageFormatter_snippetStart . ',' . b:MessageFormatter_snippetEnd . 'Formatvisualrange'
 
-      " Move to the end of the snippet and start insert mode so the user can continue.
-      "
-      " SALMAN: Look for {|} or something and move the cursor there instead?
+      " Start insert mode so the user can continue.
       if ( a:endInInsertMode )
-        execute b:MessageFormatter_snippetEnd
-
-        startinsert!
+        call MessageFormatter#EditFirstJumpLocation( b:MessageFormatter_snippetStart, b:MessageFormatter_snippetEnd )
       endif
 
       return
@@ -528,6 +567,10 @@ function! MessageFormatter#FormatCurrentTemplate( endInInsertMode )
 
   if ( GetVar#GetVar( "MessageFormatter_formatCurrentLineAsFallback" ) == 1 )
     echo error . ' Falling back to current line.'
+
+    " Break the undo chain.
+    execute "normal! i\<c-g>u"
+
     Formatvisualrange
   else
     echo error
@@ -550,6 +593,9 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
   let currentLine                   = a:line1
   let firstLine                     = 1
 
+  " Matches an expression that can be expanded; doesn't examine contents or anything; is a blanket match to see whether we should process the line.
+  let blanketDirectiveExpression = '{.\{-}::\%([^_}]_*\)\=[^}]\{-}}'
+
   let directiveExpression       = '{\(\%(\\[{}]\|[^{}]\)\{-}\)::\%(\(\%(\\[{}]\|[^{}]\)\{-}\)_\)\=\(\%(\\[{}]\|[^{}]\)\{-}\)}'
   let simpleDirectiveExpression = '{\(\%(\\[{}]\|[^{}]\)\+\)}'
 
@@ -558,7 +604,7 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
     let originalLine = getline( currentLine )
     let newLine      = originalLine
 
-    if ( newLine =~ directiveExpression )
+    if ( newLine =~ blanketDirectiveExpression )
       let newLine    = ''
       let startIndex = 0
       let matchIndex = match( originalLine, simpleDirectiveExpression, startIndex )
@@ -592,7 +638,7 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
       let s:MessageFormatter_parameters[ variable ] = value == GetVar#GetVar( "MessageFormatter_jumpMarker" ) || value == GetVar#GetVar( "MessageFormatter_blankParameter" ) ? '' : value
 
       let replacement = modifiers == '' ? '\4' : '\3_\4'
-      let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1_OPEN_DIRECTIVE_BRACE_' . replacement . '_CLOSE_DIRECTIVE_BRACE_\5', '' )
+      let newLine     = substitute( newLine, '^\(.\{-}\)' . directiveExpression . '\(.*\)$', '\1' . s:escapeOpenBrace . replacement . s:escapeCloseBrace . '\5', '' )
     endwhile
 
     let newLine = substitute( newLine, s:escapeOpenBrace, '{', 'g' )
@@ -630,4 +676,35 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
 
     let currentLine += 1
   endwhile
+
+  " Replace <CR> with newlines and <SW> with 'shiftwidth' spaces. This requires the entire set of lines to be stored and then restored en masse, I think.
+  let result      = ''
+  let changes     = 0
+  let currentLine = a:line1
+
+  while ( currentLine <= a:line2 )
+    let thisLine = getline( currentLine )
+    let newLine  = substitute( thisLine, '\C<CR>', "\n", 'g' )
+    let newLine  = substitute( newLine, '\C<SW>', repeat( ' ', &sw ), 'g' )
+
+    if ( newLine != thisLine )
+      let changes = 1
+    endif
+
+    let result .= newLine
+
+    if ( currentLine < a:line2 )
+      let result .= "\n"
+    endif
+
+    let currentLine += 1
+  endwhile
+
+  let savedFo = &fo
+  let savedPaste = &paste
+  set fo=
+  set paste
+  execute "normal! " . a:line1 . "ggV" . a:line2 . "ggc\<c-r>=result\<ESC>"
+  let &paste = savedPaste
+  let &fo = savedFo
 endfunction

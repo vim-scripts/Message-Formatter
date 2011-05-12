@@ -41,3 +41,17 @@ gets expanded to
 
 Observe, also, how the "fullName" directive recursively contained and expanded
 the fName directive.
+
+In the "getset" example, the "get" is defined as:
+
+Addlocaltemplate get public {::type} {eval '{type}' ==? 'boolean' ? 'is' : 'get'::get}{::cf_property}()\n{\nreturn m_{c_property};\n}
+
+The "set" is defined as:
+
+Addlocaltemplate set public void set{::cf_property}( {::type} val )\n{\nm_{c_property} = val;\n}
+
+And the "getset" is defined simply as:
+
+Addlocaltemplate getset {tem get::getTem}\n\n{tem set::setTem}
+
+This allows "get" and "set" to be used independently (for read-only or write-only properties, for example) and doesn't require duplication of code to define a separate "getset".

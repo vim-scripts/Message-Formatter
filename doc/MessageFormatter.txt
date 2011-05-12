@@ -161,6 +161,12 @@ Where «» is whatever |g:MessageFormatter_jumpMarker| is set to.
 Defaults to "Error". The syntax item to which the directives are linked for
 highlighting.
 
+                          *g:MessageFormatter_highlightDirectiveModifiersLink*
+
+Defaults to "Constant". The syntax item to which the directive modifiers are
+linked for highlighting.
+
+
                                      *g:MessageFormatter_moveArgumentsToStart*
 
 If 1 (the default), then all input arguments are moved to the beginning of the
@@ -363,11 +369,12 @@ details) in insert mode to get >
                                                    *MessageFormatter_example2*
 
 Another one: >
-        Addglobaltemplate do do\n{\n|\n} while ( !jump! );
+        Addglobaltemplate do do\n{\n!jump!\n} while ( !jump! );
 <
 Type "do" and hit the mapping for |<Plug>PlaceTemplateInText| and it will
 replace the word with the expansion in place (can be used with "var", also),
-moving the cursor to the | and replacing the !jump! with jump characters.
+moving the cursor to the first !jump! And replacing the other !jump! with jump
+characters.
 
 If the |<Plug>PlaceTemplateInText| mapping is used for expansions such as "var"
 above, the cursor goes to the first {::...} variable and all others change to
@@ -432,6 +439,20 @@ NOTES                                                 *MessageFormatter_Notes*
 - Patterns replace all \n instances (backslashes followed by 'n') with
   newlines and all !jump! occurrences with the value of
   MessageFormatter_jumpMarker.
+
+                                                         *MessageFormatter_CR*
+
+- Patterns replace all instances of "<CR>" (case-sensitive and without the
+  quotes) with newlines AT THE VERY END OF PROCESSING. This allows "eval"
+  expressions to result in multiple lines. Note that the indentation may break
+  here because this uses 'paste' to make sure lines are placed in as they are
+  found.
+
+                                                         *MessageFormatter_SW*
+
+- Similarly, patterns replace all instances of "<SW>" with 'shiftwidth'
+  spaces; this can be used to reset indentation in case the use of "<CR>"
+  above breaks indentation.
 
 - Template definitions are searched locally and then globally, thus a local
   template with the same name will always be used instead of the global one.
@@ -512,6 +533,38 @@ Note the space between the "def" and the "::"; simply using >
         {def::someVar}
 <
 sets the value of "someVar" as "def".
+
+                                                        *MessageFormatter_tem*
+
+  - "tem ": The remainder of the value is taken to be the name of another
+    template and is replaced with the expansion of that. For example, given
+    these three templates: >
+        Addlocaltemplate c {::c_arg}
+        Addlocaltemplate C {::C_arg}
+        Addlocaltemplate cf {::cf_arg}
+<
+    We can now define this template: >
+        Addlocaltemplate a {tem c::u_a} {tem C::a}
+<
+    Note that the variable modifiers and name aren't used (the "u_a" and "a"
+    don't matter, though they are required--you may make them all the same).
+
+    Recursion is supported, so another template that uses "a" may be defined: >
+        Addlocaltemplate b {tem cf::a} {tem a::a}
+<
+    Now, calling "b": >
+        b  this is neat
+<
+    results in >
+        ThisIsNeat thisIsNeat THIS_IS_NEAT
+<
+    Note also that inner templates that use the same variable name ("arg") get
+    consolidated so it needs to be specified only once (ending up with only
+    one required argument, not three); thus, the inline expansion of "b"
+    (using |<Plug>PlaceTemplateInText|) gives >
+        {|::n_arg}{cf_arg} {c_arg} {C_arg}«»
+<
+    (You end up in insert mode, with the cursor location indicated by the |.)
 
 
 ==============================================================================
