@@ -1,6 +1,12 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" Version 8.0:
+"
+" New special value: "iab" to expand insert-mode abbreviations inline; see :help MessageFormatter_iab.
+"
+" New mapping: <Plug>InsertModeCompletion (// by default) that will complete templates during insert-mode.
+"
 " Version 7.5:
 "
 " New special value: "tem" to include other template definitions inline; see :help MessageFormatter_tem.
@@ -393,6 +399,20 @@ function! MessageFormatter#ModifyValue( value, modifiers )
   return result
 endfunction
 
+" Expands an abbreviation (insert mode) and returns the value.
+function! MessageFormatter#ExpandAbbreviation( abbreviation )
+  let savedZ = @z
+
+  " On a fresh line, expand the abbreviation, yank the result and then undo it.
+  execute "silent! normal o\<esc>0C" . a:abbreviation . "\<esc>0\"zy$u"
+
+  let result = @z
+
+  let @z = savedZ
+
+  return result
+endfunction
+
 function! MessageFormatter#ProcessOnce( message, parameters, recursive )
   let isDictionary = type( a:parameters ) == 4
 
@@ -441,6 +461,8 @@ function! MessageFormatter#ProcessOnce( message, parameters, recursive )
           let parameterValue = substitute( parameterValue, '^''\{,2}\(.\{-}\)''\{,2}$', '\1', 'g' )
         elseif ( parameterValue =~# 'ask\%( \|$\)' )
           let parameterValue = input( "Set '" . parameter . "' to: ", substitute( parameterValue, '^ask \=', '', '' ) )
+        elseif ( parameterValue =~# '^iab ' )
+          let parameterValue = MessageFormatter#ExpandAbbreviation( substitute( parameterValue, '^iab ', '', '' ) )
         endif
 
         let s:parameterCache[ parameter ] = parameterValue
@@ -648,7 +670,7 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
       if ( firstLine == 1 )
         let firstLine = 0
       else
-        undojoin
+        silent! undojoin
       endif
 
       call setline( currentLine, newLine )
@@ -668,7 +690,7 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
       let newLine = MessageFormatter#FormatMessage( thisLine, s:MessageFormatter_parameters, 1, 1 )
 
       if ( newLine !=# thisLine )
-        undojoin
+        silent! undojoin
 
         call setline( currentLine, newLine )
       endif

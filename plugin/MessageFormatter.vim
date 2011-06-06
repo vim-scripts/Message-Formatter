@@ -175,7 +175,7 @@ function! PlaceTemplateInText()
 
   let saveZ = @z
 
-  normal "zdiW
+  normal "zciW*
 
   let templateName = @z
 
@@ -213,11 +213,11 @@ function! PlaceTemplateInText()
   " Convert jump directives
   let result = substitute( result, '!jump!', GetVar#GetVar( "MessageFormatter_jumpMarker" ), 'g' )
 
-  undojoin
+  silent! undojoin
 
   let savedFo = &fo
   set fo=
-  execute 'normal! a' . result . "\<esc>"
+  execute 'normal! "_s' . result . "\<esc>"
   let &fo = savedFo
 
   " Store for automatic expansion later.
@@ -519,6 +519,14 @@ function! ShowTemplates( scope, templateName )
   endtry
 endfunction
 
+function! LocalTemplateList( A, C, P )
+  return exists( "b:MessageFormatter_templates" ) ? join( sort( keys( b:MessageFormatter_templates ) ), "\n" ) : ""
+endfunction
+
+function! GlobalTemplateList( A, C, P )
+  return exists( "g:MessageFormatter_templates" ) ? join( sort( keys( g:MessageFormatter_templates ) ), "\n" ) : ""
+endfunction
+
 " This should be an option.
 function! s:ColorDirectives()
   " syn match MessageFormatter_DirectiveDefaults '[:_]\zs\%(override\|default\)' containedin=MessageFormatter_Directive
@@ -541,11 +549,45 @@ function! SetColorDirectives( enable )
   augroup END
 endfunction
 
+function! MessageFormatter_CompleteTemplates( findstart, base )
+  if ( a:findstart )
+    " locate the start of the word
+    let line  = getline( '.' )
+    let start = col( '.' ) - 1
+
+    while ( start > 0 && line[ start - 1 ] =~ '\S' )
+      let start -= 1
+    endwhile
+
+    return start
+  else
+    " find months matching with "a:base"
+    let templates = exists( "b:MessageFormatter_templates" ) ? b:MessageFormatter_templates : {}
+    call extend( templates, g:MessageFormatter_templates )
+
+    let res = []
+
+    " for m in ( sort( keys( b:MessageFormatter_templates ) ) + sort( keys( g:MessageFormatter_templates ) ) )
+    for m in ( sort( keys( templates ) ) )
+      if ( m =~ '^' . a:base )
+        let newItem = {}
+
+        let newItem.word = m
+        let newItem.menu = templates[ m ]
+
+        call add( res, newItem )
+      endif
+    endfor
+
+    return res
+  endif
+endfun
+
 com! -nargs=+ Addglobaltemplate call AddMessageFormatterTemplate( 1, <q-args> )
 com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 
-com! -nargs=? Listglobaltemplates call ShowTemplates( 'g', <q-args> )
-com! -nargs=? Listlocaltemplates call ShowTemplates( 'b', <q-args> )
+com! -nargs=? -complete=custom,GlobalTemplateList Listglobaltemplates call ShowTemplates( 'g', <q-args> )
+com! -nargs=? -complete=custom,LocalTemplateList Listlocaltemplates call ShowTemplates( 'b', <q-args> )
 
 com! -nargs=? -range Formatvisualrange :call MessageFormatter#FormatVisualRange( <line1>, <line2>, <q-args> )
 
@@ -601,6 +643,10 @@ if ( !hasmapto( '<Plug>FormatOpModeTemplate', 'n' ) )
   nmap <silent> <c-s-del> <Plug>FormatOpModeTemplate
 endif
 
+if ( !hasmapto( '<Plug>MessageFormatter_InsertModeCompletion', 'i' ) )
+  imap <silent> // <Plug>MessageFormatter_InsertModeCompletion
+endif
+
 imap <Plug>FormatCurrentTemplate <esc>:call MessageFormatter#FormatCurrentTemplate( 1 )<cr>
 nmap <Plug>FormatCurrentTemplate :call MessageFormatter#FormatCurrentTemplate( 0 )<cr>
 inoremap <Plug>PlaceTemplateInText <esc>:call PlaceTemplateInText()<cr>
@@ -608,9 +654,17 @@ inoremap <Plug>PlaceTemplateForLine <esc>:call PlaceTemplateForLine( '.' )<cr>
 nmap <Plug>FormatOneLine :Formatvisualrange<cr>
 vmap <Plug>FormatVisualRange :Formatvisualrange<cr>
 nmap <Plug>FormatOpModeTemplate :set opfunc=MessageFormatter#FormatOpModeTemplate<cr>g@
+imap <Plug>MessageFormatter_InsertModeCompletion <c-o>:set completefunc=MessageFormatter_CompleteTemplates<cr><c-x><c-u>
+
 
 if ( GetVar#GetSafe( "g:MessageFormatter_createDefaultTemplates", 1 ) == 1 )
   Addglobaltemplate eval {::expression} = {eval {expression}::expressionValue}
   Addglobaltemplate evalq {eval {::expression}::expressionValue}
   Addglobaltemplate sep {eval strpart( repeat( {def =::p_separator}, {def &tw::length} ), 0, {length} )::line}
+  Addglobaltemplate ca {::c_arg}
+  Addglobaltemplate co {::C_arg}
+  Addglobaltemplate cf {::cf_arg}
+  Addglobaltemplate sc {::Cl_arg}
+  Addglobaltemplate gf {eval expand( '%:p:t:r' )::thisFile}
+  Addglobaltemplate td {eval strftime("%A, %B %d, %Y")::thisDate}
 endif

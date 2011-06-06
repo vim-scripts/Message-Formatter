@@ -269,6 +269,7 @@ gives >
 <
 
 Default mapping: <c-del> (visual mode only)
+
                                                   *<Plug>FormatOpModeTemplate*
 
 Same thing as |<Plug>FormatVisualRange|, except it works in operator-pending
@@ -277,6 +278,14 @@ could hit the hotkey for <Plug>FormatOpModeTemplate followed by 3j to achieve
 the same effect.
 
 Default mapping: <c-s-del> (normal mode only)
+
+                                 *<Plug>MessageFormatter_InsertModeCompletion*
+
+Invokes user-defined insert mode custom completion (|compl-function|) and
+completes template names; the popup menu contains the template definitions for
+quick reference, also.
+
+Default mapping: // (insert mode only)
 
 
 Note:   |<Plug>PlaceTemplateInText| looks only at the current word so is useful
@@ -566,6 +575,23 @@ sets the value of "someVar" as "def".
 <
     (You end up in insert mode, with the cursor location indicated by the |.)
 
+                                                        *MessageFormatter_iab*
+
+  - "iab ": Expands the specified insert-mode abbreviation (see |:iabbrev|);
+    for example, if the following abbreviation has been defined: >
+        iab js John Smith
+<
+    then, this snippet: >
+        {iab js::name}
+<
+    gets expanded to: >
+        {John Smith::name}
+<
+    This may be recursive, so the following works (the inner abbreviation
+    expands to "js" which is recursively expanded to "John Smith"): >
+        iab test js
+        {iab {iab test::inner}::name}
+<
 
 ==============================================================================
 TIPS                                                   *MessageFormatter_Tips*
