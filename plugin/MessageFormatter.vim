@@ -10,7 +10,7 @@ if ( !exists( "g:MessageFormatter_blankParameter" ) )
 endif
 
 if ( !exists( "g:MessageFormatter_parameterSeparator" ) )
-  let g:MessageFormatter_parameterSeparator = '\s\{2,}'
+  let g:MessageFormatter_parameterSeparator = '  '
 endif
 
 if ( !exists( "g:MessageFormatter_jumpMarker" ) )
@@ -169,17 +169,21 @@ function! FormatContainedMessage( text, ... )
   return MessageFormatter#FormatMessage( messageToFormat, s:MessageFormatter_parameters, 1, exists( "a:1" ) && a:1 == 1 )
 endfunction
 
-function! PlaceTemplateInText()
+function! PlaceTemplateInText( ... )
   " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
   execute "normal! i\<c-g>u"
 
-  let saveZ = @z
+  if ( exists( "a:1" ) )
+    let templateName = a:1
+  else
+    let saveZ = @z
 
-  normal "zciW*
+    normal "zciW*
 
-  let templateName = @z
+    let templateName = @z
 
-  let @z = saveZ
+    let @z = saveZ
+  endif
 
   let result = GetTemplateDefinition( templateName )
 
@@ -404,12 +408,22 @@ function! ConsolidateDuplicateDirectives( line )
   return result
 endfunction
 
-function! PlaceTemplateForLine( lineNumber )
-  " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
-  execute "normal! i\<c-g>u"
+" If the template name is passed in, then arguments MUST be separated by MessageFormatter_parameterSeparator.
+function! PlaceTemplateForLine( lineNumber, insertMode, ... )
+  let templateNameProvided = exists( "a:1" )
+
+  if ( a:insertMode )
+    " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
+    execute "normal! i\<c-g>u"
+  endif
 
   let jumpCharacters = GetVar#GetVar( "MessageFormatter_jumpMarker" )
   let line           = getline( a:lineNumber )
+
+  " Add the template name to the line and then proceed as normal.
+  if ( templateNameProvided )
+    let line = a:1 . GetVar#GetVar( "MessageFormatter_parameterSeparator" ) . line
+  endif
 
   let args    = split( line, GetVar#GetVar( "MessageFormatter_parameterSeparator" ) )
   let numArgs = len( args )
@@ -474,6 +488,7 @@ function! PlaceTemplateForLine( lineNumber )
 
     let savedFo = &fo
     set fo=
+    execute a:lineNumber
     execute "normal! cc\<c-r>=result\<esc>"
     let &fo = savedFo
 
@@ -482,8 +497,24 @@ function! PlaceTemplateForLine( lineNumber )
 
     '[,']Formatvisualrange 0
 
-    call MessageFormatter#EditFirstJumpLocation( snippetStart, snippetEnd )
+    " If the template name is not provided, jump to insert mode. (Otherwise, it was probably called from the command line.)
+    if ( a:insertMode )
+      call MessageFormatter#EditFirstJumpLocation( snippetStart, snippetEnd )
+    endif
   endif
+endfunction
+
+function! PlaceTemplatesForRange() range
+  let lineNumber = a:lastline
+
+  while ( lineNumber >= a:firstline )
+    " Skip blank lines
+    if ( getline( lineNumber ) !~ '^\s*$' )
+      call PlaceTemplateForLine( lineNumber, 0 )
+    endif
+
+    let lineNumber -= 1
+  endwhile
 endfunction
 
 " An add abbreviation method that replaces empty {::variable} types with {«»::variable} and the very first one with a |; also replaces literal \n (backslash
@@ -583,6 +614,20 @@ function! MessageFormatter_CompleteTemplates( findstart, base )
   endif
 endfun
 
+" Must start from the bottom and go up as the number of lines might change if the template expansion adds more lines.
+function! ApplySameTemplateToMultipleLines( line1, line2, templateName )
+  let lineNumber = a:line2
+
+  while ( lineNumber >= a:line1 )
+    " Skip blank lines
+    if ( getline( lineNumber ) !~ '^\s*$' )
+      call PlaceTemplateForLine( lineNumber, 0, a:templateName )
+    endif
+
+    let lineNumber -= 1
+  endwhile
+endfunction
+
 com! -nargs=+ Addglobaltemplate call AddMessageFormatterTemplate( 1, <q-args> )
 com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 
@@ -600,6 +645,8 @@ com! Showparameters echo GetVar#GetSafe( "g:MessageFormatter_parameters", "<No p
 com! -nargs=+ Formatcontainedmessage echo FormatContainedMessage( <q-args> )
 
 com! -nargs=1 Setcolordirectives call SetColorDirectives( <args> )
+
+com! -nargs=1 -range ApplySameTemplateToMultipleLines call ApplySameTemplateToMultipleLines( <line1>, <line2>, <q-args> )
 
 
 execute 'hi link MessageFormatter_DirectiveModifiers ' . GetVar#GetVar( 'MessageFormatter_highlightDirectiveModifiersLink' )
@@ -630,6 +677,10 @@ if ( !hasmapto( '<Plug>PlaceTemplateForLine', 'i' ) )
   imap <silent> `` <Plug>PlaceTemplateForLine
 endif
 
+if ( !hasmapto( '<Plug>PlaceTemplatesForRange', 'v' ) )
+  vmap <silent> `` <Plug>PlaceTemplatesForRange
+endif
+
 if ( !hasmapto( '<Plug>FormatOneLine', 'n' ) )
   nmap <silent> <c-del><c-del> <Plug>FormatOneLine
 endif
@@ -650,7 +701,8 @@ endif
 imap <Plug>FormatCurrentTemplate <esc>:call MessageFormatter#FormatCurrentTemplate( 1 )<cr>
 nmap <Plug>FormatCurrentTemplate :call MessageFormatter#FormatCurrentTemplate( 0 )<cr>
 inoremap <Plug>PlaceTemplateInText <esc>:call PlaceTemplateInText()<cr>
-inoremap <Plug>PlaceTemplateForLine <esc>:call PlaceTemplateForLine( '.' )<cr>
+inoremap <Plug>PlaceTemplateForLine <esc>:call PlaceTemplateForLine( '.', 1 )<cr>
+vnoremap <Plug>PlaceTemplatesForRange :call PlaceTemplatesForRange()<cr>
 nmap <Plug>FormatOneLine :Formatvisualrange<cr>
 vmap <Plug>FormatVisualRange :Formatvisualrange<cr>
 nmap <Plug>FormatOpModeTemplate :set opfunc=MessageFormatter#FormatOpModeTemplate<cr>g@

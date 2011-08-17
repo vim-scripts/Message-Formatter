@@ -1,6 +1,18 @@
 " MessageFormatter.vim: an autoload plugin to format strings with parameters
 " By: Salman Halim
 "
+" To have an optional numerical argument BEFORE a non-numerical one (awfully complicated; probably not worth it):
+"
+" Addlocaltemplate test {def ::n_arg1}{def ::n_arg2}{eval IsNumber( {p_arg1} )::n_arg1IsNumerical}{eval {arg1IsNumerical} == 1 ? {arg1} : ''::n_length}{eval {arg1IsNumerical} == 0 ? {p_arg1} : {p_arg2}::n_name}{eval {p_length} == '' ? '' : 'length = {length}, '::finalLength}name = {name}
+"
+" Version 8.5:
+"
+" New directive (<LS>) to go along with <CR>, <SW>. See :help MessageFormatter_LS.
+"
+" Added a command: ApplySameTemplateToMultipleLines
+"
+" Added a mapping: <Plug>PlaceTemplatesForRange
+"
 " Version 8.0:
 "
 " New special value: "iab" to expand insert-mode abbreviations inline; see :help MessageFormatter_iab.
@@ -699,7 +711,9 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
     let currentLine += 1
   endwhile
 
-  " Replace <CR> with newlines and <SW> with 'shiftwidth' spaces. This requires the entire set of lines to be stored and then restored en masse, I think.
+  " Replace <CR> with newlines and <SW> with 'shiftwidth' spaces.
+  " Also, replace <LS> with either a space or a newline, depending on whether g:MessageFormatter_sameLineBraces is 1 or 0.
+  " This requires the entire set of lines to be stored and then restored en masse, I think.
   let result      = ''
   let changes     = 0
   let currentLine = a:line1
@@ -708,6 +722,9 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
     let thisLine = getline( currentLine )
     let newLine  = substitute( thisLine, '\C<CR>', "\n", 'g' )
     let newLine  = substitute( newLine, '\C<SW>', repeat( ' ', &sw ), 'g' )
+
+    let blankOrNewline = GetVar#GetVar( "MessageFormatter_sameLineBraces" ) == 1 ? ' ' : "\n"
+    let newLine        = substitute( thisLine, '\C<LS>', blankOrNewline, 'g' )
 
     if ( newLine != thisLine )
       let changes = 1

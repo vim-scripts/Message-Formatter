@@ -92,8 +92,8 @@ Defaults to the back tick (`).
 Regular expression used to separate multiple arguments for parameter
 expansion.
 
-Defaults to two or more whitespace characters. You could change it to a single
-tab, for example.
+Defaults to two spaces. You could change it to a single tab, for example. This
+is a literal string, not a regular expression.
 
 If no separators are found on the line, it will break the line on a single
 space instead. This is useful if the arguments are simple and contain no
@@ -197,6 +197,22 @@ Note that this option has no bearing when using |<Plug>PlaceTemplateForLine|
 because the expansion there isn't done inline, anyway.
 
 
+                                           *g:MessageFormatter_sameLineBraces*
+
+If 1, all instances of "<LS>" are replaced with a space; otherwise, with a
+newline. Useful for getting a template like this >
+        catch<LS>{
+<
+to generate either >
+        catch {
+<
+or >
+        catch
+        {
+<
+depending upon the formatting standards in place.
+
+
 ==============================================================================
 MAPPINGS                                           *MessageFormatter_Mappings*
 
@@ -287,10 +303,17 @@ quick reference, also.
 
 Default mapping: // (insert mode only)
 
+                                                *<Plug>PlaceTemplatesForRange*
+
+Just like |<Plug>PlaceTemplateForLine|, except that it applies to a visually
+selected range, each with its own template and arguments.
+
+Default mapping: `` (two back-ticks; visual mode only)
+
 
 Note:   |<Plug>PlaceTemplateInText| looks only at the current word so is useful
         for templates that are meant to be used as part of a whole line (look
-        at "safetern" in the examples), although it can be used for multi-line
+        at "ca" in the examples), although it can be used for multi-line
         templates, also. Conversely, |<Plug>PlaceTemplateForLine| looks at the
         entire line because it expects all the parameter values to be provided
         up front.
@@ -335,6 +358,22 @@ that, in fact).
 Takes one argument (1 or 0); if 1, enables the highlighting of directives (see
 g:MessageFormatter_highlightDirectives|) in text when placed through
 |<Plug>PlaceTemplateInText| or manually for one-time expansion.
+
+
+                                            *ApplySameTemplateToMultipleLines*
+
+Works off a visual range and applies the same template (specified on the
+command-line) to all of them. Useful for quickly creating a list of constants,
+for example: >
+        String  first variable
+        String  second variable
+        String  third variable
+<
+Highlight the range and type >
+        ApplySameTemplateToMultipleLines const
+<
+Note:   This requires that arguments ALWAYS be separated by
+        |g:MessageFormatter_parameterSeparator|.
 
 
 ==============================================================================
@@ -462,6 +501,12 @@ NOTES                                                 *MessageFormatter_Notes*
 - Similarly, patterns replace all instances of "<SW>" with 'shiftwidth'
   spaces; this can be used to reset indentation in case the use of "<CR>"
   above breaks indentation.
+
+
+                                                         *MessageFormatter_LS*
+
+- Patterns replace all instances of "<LS>" with either a space or a newline,
+  depending on the value of |g:MessageFormatter_sameLineBraces|.
 
 - Template definitions are searched locally and then globally, thus a local
   template with the same name will always be used instead of the global one.
