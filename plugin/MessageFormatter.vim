@@ -231,7 +231,8 @@ function! PlaceTemplateInText( ... )
   call MessageFormatter#EditFirstJumpLocation( b:MessageFormatter_snippetStart, b:MessageFormatter_snippetEnd )
 endfunction
 
-function! GetTemplateDefinition( templateName )
+" If the second optional argument is provided and the template doesn't exist, return the empty string.
+function! GetTemplateDefinition( templateName, ... )
   " First look for a local key and then for a global key.
   let result = ''
   let root   = 'b'
@@ -245,7 +246,7 @@ function! GetTemplateDefinition( templateName )
   if ( hasKey )
     let result = {root}:MessageFormatter_templates[ a:templateName ]
   else
-    let result = '!' . a:templateName . '!'
+    let result = !exists( "a:1" ) ? '!' . a:templateName . '!' : ''
   endif
 
   return result
@@ -422,7 +423,7 @@ function! PlaceTemplateForLine( lineNumber, insertMode, ... )
 
   " Add the template name to the line and then proceed as normal.
   if ( templateNameProvided )
-    let line = a:1 . GetVar#GetVar( "MessageFormatter_parameterSeparator" ) . line
+    let line = a:1 . GetVar#GetVar( "MessageFormatter_parameterSeparator" ) . substitute( line, '^\s*', '', '' )
   endif
 
   let args    = split( line, GetVar#GetVar( "MessageFormatter_parameterSeparator" ) )
@@ -448,7 +449,11 @@ function! PlaceTemplateForLine( lineNumber, insertMode, ... )
   if ( templateDefinition == '!' . templateName . '!' )
     echo printf( "The template \"%s\" wasn't found locally or globally.", templateName )
 
-    startinsert!
+    if ( a:insertMode )
+      startinsert!
+    endif
+
+    return -1
   elseif ( numArgs < ( numSplits - s:numOptionalArguments ) )
     if ( s:numOptionalArguments > 0 )
       echo printf( "Not enough arguments for \"%s\"; need at least %d (up to %d), but got only %d.", templateName, numSplits - s:numOptionalArguments - 1, numSplits - 1, numArgs - 1 )
@@ -456,7 +461,11 @@ function! PlaceTemplateForLine( lineNumber, insertMode, ... )
       echo printf( "Not enough arguments for \"%s\"; need exactly %d, but got only %d.", templateName, numSplits - 1, numArgs - 1 )
     endif
 
-    startinsert!
+    if ( a:insertMode )
+      startinsert!
+    endif
+
+    return -1
   else
     let result = splitted[ 0 ]
 
@@ -502,6 +511,8 @@ function! PlaceTemplateForLine( lineNumber, insertMode, ... )
       call MessageFormatter#EditFirstJumpLocation( snippetStart, snippetEnd )
     endif
   endif
+
+  return 1
 endfunction
 
 function! PlaceTemplatesForRange() range
@@ -628,6 +639,78 @@ function! ApplySameTemplateToMultipleLines( line1, line2, templateName )
   endwhile
 endfunction
 
+" something to do eval  3 * 3 something else
+" something to do block while something else
+
+" SALMAN: Pass in option to have it work on word-character-only templates--would have to change the whitespace splits to \W and the \S to \w.
+function! PlaceInlineTemplateForLine()
+  let line         = getline( '.' )
+  let originalLine = line
+  let tokens       = split( line, '\s\+' )
+
+  let i          = 0
+  let definition = ''
+
+  while ( i < len( tokens ) )
+    let token      = tokens[ i ]
+    let definition = GetTemplateDefinition( token, 1 )
+
+    if ( definition != '' )
+      break
+    endif
+
+    let i += 1
+  endwhile
+
+  if ( definition == '' )
+    " Nothing fount; tell them.
+    echo "No template name found on the line."
+
+    return
+  endif
+
+  let cursorPosition   = getpos( '.' )[ 2 ]
+  let prefixExpression = '^\(\s*\%(\S\+\s\+\)\{' . i . '}\)\(.*\)'
+  let suffixExpression = '^\(.\{' . cursorPosition . '}\)\(.*\)'
+
+  let suffix = substitute( line, suffixExpression, '\2', '' )
+  let prefix = substitute( line, prefixExpression, '\1', '' )
+
+  let line = substitute( line, suffixExpression, '\1', '' )
+  let line = substitute( line, prefixExpression, '\2', '' )
+
+  " Break the undo chain so hitting undo gives the user back the word they had typed to launch this mapping.
+  execute "normal! i\<c-g>u"
+
+  call setline( '.', line )
+
+  let expansion = PlaceTemplateForLine( '.', 0 )
+
+  " Success
+  if ( expansion == 1 )
+    let snippetStart = line( "'[" )
+    let snippetEnd   = line( "']" )
+
+    let lastLine = getline( snippetEnd )
+
+    " Put in a jump marker right at the end of the snippet so the cursor will end up there after the expansion (if there isn't one there already as the snippet
+    " might have placed one, especially if it's a block snippet).
+    if ( lastLine !~ GetVar#GetVar( "MessageFormatter_jumpMarker" ) . '$' )
+      let suffix = GetVar#GetVar( "MessageFormatter_jumpMarker" ) . suffix
+    endif
+
+    " GetVar#GetVar( "MessageFormatter_jumpMarker" )
+    call setline( snippetEnd, lastLine . suffix )
+    call setline( snippetStart, prefix . getline( snippetStart ) )
+
+    call MessageFormatter#EditFirstJumpLocation( snippetStart, snippetEnd )
+  else
+    undo
+    execute 'normal ' . ( cursorPosition + 1 ) . '|'
+    startinsert
+  endif
+endfunction
+
 com! -nargs=+ Addglobaltemplate call AddMessageFormatterTemplate( 1, <q-args> )
 com! -nargs=+ Addlocaltemplate call AddMessageFormatterTemplate( 0, <q-args> )
 
@@ -677,6 +760,10 @@ if ( !hasmapto( '<Plug>PlaceTemplateForLine', 'i' ) )
   imap <silent> `` <Plug>PlaceTemplateForLine
 endif
 
+if ( !hasmapto( '<Plug>PlaceInlineTemplateForLine', 'i' ) )
+  imap <silent> `. <Plug>PlaceInlineTemplateForLine
+endif
+
 if ( !hasmapto( '<Plug>PlaceTemplatesForRange', 'v' ) )
   vmap <silent> `` <Plug>PlaceTemplatesForRange
 endif
@@ -701,6 +788,7 @@ endif
 imap <Plug>FormatCurrentTemplate <esc>:call MessageFormatter#FormatCurrentTemplate( 1 )<cr>
 nmap <Plug>FormatCurrentTemplate :call MessageFormatter#FormatCurrentTemplate( 0 )<cr>
 inoremap <Plug>PlaceTemplateInText <esc>:call PlaceTemplateInText()<cr>
+inoremap <Plug>PlaceInlineTemplateForLine <esc>:call PlaceInlineTemplateForLine()<cr>
 inoremap <Plug>PlaceTemplateForLine <esc>:call PlaceTemplateForLine( '.', 1 )<cr>
 vnoremap <Plug>PlaceTemplatesForRange :call PlaceTemplatesForRange()<cr>
 nmap <Plug>FormatOneLine :Formatvisualrange<cr>

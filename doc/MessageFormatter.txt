@@ -232,7 +232,7 @@ Default mapping: <c-del> (both insert and normal mode)
 
                                                    *<Plug>PlaceTemplateInText*
 
-Given a template name as the WORD (including special characters) on the cusor,
+Given a template name as the |WORD| (including special characters) on the cusor,
 replaces it with the expansion; if the expansion isn't found, it's replaced
 with itself, wrapped in exclamation marks, so "adsfasdfadsf" becomes
 "!adsfasdfadsf!". You can then hit undo do get to the original and spell it
@@ -309,6 +309,31 @@ Just like |<Plug>PlaceTemplateForLine|, except that it applies to a visually
 selected range, each with its own template and arguments.
 
 Default mapping: `` (two back-ticks; visual mode only)
+
+                                            *<Plug>PlaceInlineTemplateForLine*
+
+Expands a template in the middle of the line; for example, given: >
+        Let's turn this expression to camel case: ca  a few words end test
+<
+Place the cursor just past the s and words and press the hotkey to get: >
+        Let's turn this expression to camel case: aFewWords end test
+<
+The cursor is placed in insert mode and is in roughly the same location as
+before (after the expansion, where previously, it was after the original
+text). Of course, if the expansion contains |g:MessageFormatter_jumpMarker|
+jump markers, they are honored.
+
+The mechanism starts at the beginning of the line and examines each
+non-whitespace |WORD| (up to the cursor position) and uses the first matching
+template it finds--this means that there is a possibility that it will find
+another template that happens to occur earlier in the line (rather than the
+closest one to the cursor).
+
+Lastly, note how the arguments to the "ca" template were separated by two
+spaces (the default value for |g:MessageFormatter_parameterSeparator|) so that
+multiple words would be treated as one argument.
+
+Default mapping: `.
 
 
 Note:   |<Plug>PlaceTemplateInText| looks only at the current word so is useful

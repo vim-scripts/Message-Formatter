@@ -5,6 +5,11 @@
 "
 " Addlocaltemplate test {def ::n_arg1}{def ::n_arg2}{eval IsNumber( {p_arg1} )::n_arg1IsNumerical}{eval {arg1IsNumerical} == 1 ? {arg1} : ''::n_length}{eval {arg1IsNumerical} == 0 ? {p_arg1} : {p_arg2}::n_name}{eval {p_length} == '' ? '' : 'length = {length}, '::finalLength}name = {name}
 "
+" Version 9.0:
+"
+" Added a new mapping: <Plug>PlaceInlineTemplateForLine; allows for template expansion on the current line even if the template is somewhere in the middle of
+" the line.
+"
 " Version 8.5:
 "
 " New directive (<LS>) to go along with <CR>, <SW>. See :help MessageFormatter_LS.
@@ -724,7 +729,7 @@ function! MessageFormatter#FormatVisualRange( line1, line2, ... )
     let newLine  = substitute( newLine, '\C<SW>', repeat( ' ', &sw ), 'g' )
 
     let blankOrNewline = GetVar#GetVar( "MessageFormatter_sameLineBraces" ) == 1 ? ' ' : "\n"
-    let newLine        = substitute( thisLine, '\C<LS>', blankOrNewline, 'g' )
+    let newLine        = substitute( newLine, '\C<LS>', blankOrNewline, 'g' )
 
     if ( newLine != thisLine )
       let changes = 1
